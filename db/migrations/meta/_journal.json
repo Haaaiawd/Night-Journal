@@ -15,6 +15,13 @@
       "when": 1781920676356,
       "tag": "0001_little_nekra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1781937855722,
+      "tag": "0002_abandoned_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

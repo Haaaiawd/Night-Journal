@@ -219,19 +219,35 @@ function BottomDrawer({
   const contentRef = useRef<HTMLDivElement>(null)
   const keyboardHeight = useKeyboardHeight()
 
-  // Lock body scroll when drawer is open to prevent iOS pushing the page
+  // Lock body scroll when drawer is open.
+  // We avoid position:fixed on the body because it causes layout jumps on
+  // keyboard show/hide that get misinterpreted as clicks on the overlay.
+  // Instead we use overflow + overscroll-behavior on html/body and block
+  // touchmove events outside the drawer's scrollable content area, which
+  // reliably prevents iOS Safari background scroll-through.
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden'
-      document.body.style.position = 'fixed'
-      document.body.style.width = '100%'
-      document.body.style.height = '100%'
+    if (!open) return
+
+    const html = document.documentElement
+    const body = document.body
+
+    body.style.overflow = 'hidden'
+    html.style.overflow = 'hidden'
+    body.style.overscrollBehavior = 'none'
+    html.style.overscrollBehavior = 'none'
+
+    const preventTouchMove = (e: TouchEvent) => {
+      if (contentRef.current?.contains(e.target as Node)) return
+      e.preventDefault()
     }
+    document.addEventListener('touchmove', preventTouchMove, { passive: false })
+
     return () => {
-      document.body.style.overflow = ''
-      document.body.style.position = ''
-      document.body.style.width = ''
-      document.body.style.height = ''
+      body.style.overflow = ''
+      html.style.overflow = ''
+      body.style.overscrollBehavior = ''
+      html.style.overscrollBehavior = ''
+      document.removeEventListener('touchmove', preventTouchMove)
     }
   }, [open])
 
@@ -359,7 +375,10 @@ function BottomDrawer({
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop — sits BELOW the drawer (z-overlay < z-drawer).
+              Clicks are ignored while the keyboard is open to prevent
+              accidental close when the keyboard dismisses and the layout
+              shifts, which would otherwise register as a tap on the overlay. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -367,10 +386,13 @@ function BottomDrawer({
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-overlay"
             style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
-            onClick={handleClose}
+            onClick={keyboardHeight > 0 ? undefined : handleClose}
           />
 
-          {/* Drawer */}
+          {/* Drawer — sits ABOVE the overlay so its controls are always
+              tappable. Height is a stable 85vh (max 640px normally); when the
+              keyboard opens we shift bottom up and cap maxHeight to the
+              remaining visible viewport so the header never clips off-screen. */}
           <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
@@ -379,8 +401,10 @@ function BottomDrawer({
             className="fixed left-0 right-0 z-drawer mx-auto flex max-w-[480px] flex-col"
             style={{
               bottom: `${keyboardHeight}px`,
-              height: keyboardHeight > 0 ? `${window.visualViewport?.height ?? window.innerHeight}px` : '85vh',
-              maxHeight: keyboardHeight > 0 ? 'none' : '640px',
+              height: '85vh',
+              maxHeight: keyboardHeight > 0
+                ? `${window.innerHeight - keyboardHeight}px`
+                : '640px',
               backgroundColor: 'var(--bg-elevated)',
               borderRadius: '24px 24px 0 0',
             }}
@@ -904,17 +928,17 @@ export default function Home() {
 
       {/* ── Quick-Add FAB ── */}
       <motion.button
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
+        initial={{ scale: 0, opacity: 0, x: '-50%' }}
+        animate={{ scale: 1, opacity: 1, x: '-50%' }}
         transition={{
           type: 'spring',
           damping: 20,
           stiffness: 300,
           delay: 0.4,
         }}
-        whileTap={{ scale: 0.88 }}
+        whileTap={{ scale: 0.88, x: '-50%' }}
         onClick={() => setDrawerOpen(true)}
-        className="fixed left-1/2 z-fab flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full text-white shadow-fab"
+        className="fixed left-1/2 z-fab flex h-14 w-14 items-center justify-center rounded-full text-white shadow-fab"
         style={{
           bottom: '88px',
           backgroundColor: 'var(--accent)',

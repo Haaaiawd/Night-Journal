@@ -65,6 +65,18 @@ const DIARY_STYLES = [
   { value: '清醒但不冷漠', desc: '理性中带着温度' },
 ] as const
 
+// Default per-style prompt snippets. Users can edit and override these.
+// When generating a diary, the selected style's snippet gets injected into
+// the main diary prompt to steer the LLM's writing voice.
+const DEFAULT_STYLE_PROMPTS: Record<string, string> = {
+  '温柔真实': '像朋友间的轻声倾诉，语气温柔但真实。不刻意渲染情绪，让日常细节自然流露。多用短句，偶尔停下来，像在想什么事情。',
+  '文学感': '用细腻的文学化语言，可以有比喻和意象。句式错落有致，注重画面感和节奏感。允许适度的文学化加工，但不能改变事实。',
+  '克制冷静': '简洁、客观、观察者的视角。少用形容词，让事实本身说话。情绪藏在留白和沉默里，不直接说出来。',
+  '情绪充沛': '允许情感饱满地流露，可以直抒胸臆。不用克制，但不要无病呻吟。情绪是真实的，就让它出来。',
+  '像写给未来的自己': '以时间胶囊的口吻叙述，像在跟未来的自己对话。可以带有回顾和期许，但不要说教。把今天留给未来的自己去读。',
+  '清醒但不冷漠': '理性中带着温度。有观察有思考，但不冷硬。保持对生活的善意，看清楚了依然温柔。',
+}
+
 const DIARY_LENGTHS = [
   { value: '短', range: '300-500字' },
   { value: '中', range: '700-1000字' },
@@ -682,6 +694,7 @@ function WriterModelTab() {
   const [length, setLength] = useState('中')
   const [genTime, setGenTime] = useState('02:00')
   const [prompt, setPrompt] = useState(DEFAULT_DIARY_PROMPT)
+  const [stylePromptsMap, setStylePromptsMap] = useState<Record<string, string>>(DEFAULT_STYLE_PROMPTS)
   const [showKey, setShowKey] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
 
@@ -695,6 +708,16 @@ function WriterModelTab() {
       if (settings.diaryLength) setLength(settings.diaryLength)
       if (settings.diaryGenerationTime) setGenTime(settings.diaryGenerationTime)
       if (settings.diaryPromptTemplate) setPrompt(settings.diaryPromptTemplate)
+      if (settings.stylePrompts) {
+        try {
+          const parsed = JSON.parse(settings.stylePrompts) as Record<string, string>
+          // Merge: server overrides defaults, but any new default styles not in
+          // server data still fall back to DEFAULT_STYLE_PROMPTS
+          setStylePromptsMap({ ...DEFAULT_STYLE_PROMPTS, ...parsed })
+        } catch {
+          // Malformed JSON — keep defaults
+        }
+      }
     }
   }, [settings])
 
@@ -707,6 +730,7 @@ function WriterModelTab() {
       diaryLength?: string
       diaryGenerationTime?: string
       diaryPromptTemplate?: string
+      stylePrompts?: string
       diaryApiKey?: string
     } = {
       diaryApiBaseUrl: apiBase || undefined,
@@ -716,12 +740,13 @@ function WriterModelTab() {
       diaryLength: length,
       diaryGenerationTime: genTime,
       diaryPromptTemplate: prompt || undefined,
+      stylePrompts: JSON.stringify(stylePromptsMap),
     }
     if (apiKey.trim()) {
       payload.diaryApiKey = apiKey.trim()
     }
     updateDiary.mutate(payload)
-  }, [apiBase, apiKey, modelName, language, style, length, genTime, prompt, updateDiary])
+  }, [apiBase, apiKey, modelName, language, style, length, genTime, prompt, stylePromptsMap, updateDiary])
 
   const handleTest = useCallback(async () => {
     const keyToTest = apiKey.trim()
@@ -742,6 +767,14 @@ function WriterModelTab() {
   }, [apiKey, apiBase, modelName, testDiary])
 
   const handleResetPrompt = () => setPrompt(DEFAULT_DIARY_PROMPT)
+
+  const handleStylePromptChange = useCallback((styleKey: string, value: string) => {
+    setStylePromptsMap((prev) => ({ ...prev, [styleKey]: value }))
+  }, [])
+
+  const handleResetStylePrompt = useCallback((styleKey: string) => {
+    setStylePromptsMap((prev) => ({ ...prev, [styleKey]: DEFAULT_STYLE_PROMPTS[styleKey] ?? '' }))
+  }, [])
 
   const isSaving = updateDiary.isPending
 
@@ -991,6 +1024,54 @@ function WriterModelTab() {
                 </div>
               </button>
             ))}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Style Prompt Editor — edits the prompt snippet for the currently selected style */}
+      <motion.div variants={cardItem}>
+        <Card
+          className="overflow-hidden rounded-2xl border-0 shadow-none"
+          style={{ backgroundColor: 'var(--bg-surface)' }}
+        >
+          <CardHeader className="px-4 pt-4 pb-0">
+            <CardTitle
+              className="text-base font-medium"
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                color: 'var(--text-primary)',
+              }}
+            >
+              风格提示词
+            </CardTitle>
+            <CardDescription style={{ color: 'var(--text-tertiary)' }} className="text-xs">
+              当前风格「{style}」的写作指引，生成日记时会注入到主 Prompt 中
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 p-4">
+            <Textarea
+              value={stylePromptsMap[style] ?? ''}
+              onChange={(e) => handleStylePromptChange(style, e.target.value)}
+              className="min-h-[120px] resize-y rounded-xl border text-sm leading-relaxed"
+              style={{
+                backgroundColor: 'var(--bg-elevated)',
+                borderColor: 'var(--divider)',
+                color: 'var(--text-primary)',
+              }}
+              aria-label={`风格「${style}」的提示词`}
+            />
+            <div className="flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleResetStylePrompt(style)}
+                className="gap-1 text-xs"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                <RotateCcw size={14} />
+                恢复此风格默认
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </motion.div>
