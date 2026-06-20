@@ -6,6 +6,7 @@ import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
 import { createOAuthCallbackHandler, createOAuthInitiateHandler } from "./kimi/auth";
+import { createRegisterHandler, createLoginHandler } from "./auth/password";
 import { Paths } from "@contracts/constants";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
@@ -13,6 +14,8 @@ const app = new Hono<{ Bindings: HttpBindings }>();
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.get(Paths.oauthInitiate, createOAuthInitiateHandler());
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
+app.post(Paths.authRegister, createRegisterHandler());
+app.post(Paths.authLogin, createLoginHandler());
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",

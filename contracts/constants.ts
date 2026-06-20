@@ -15,6 +15,9 @@ export const ErrorMessages = {
 
 export const Paths = {
   login: "/login",
+  register: "/register",
   oauthInitiate: "/api/oauth/initiate",
   oauthCallback: "/api/oauth/callback",
+  authRegister: "/api/auth/register",
+  authLogin: "/api/auth/login",
 } as const;

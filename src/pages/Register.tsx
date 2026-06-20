@@ -6,26 +6,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 
-export default function Login() {
+export default function Register() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (password !== confirm) {
+      setError("两次输入的密码不一致");
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json() as { error?: string };
       if (!res.ok) {
-        setError(data.error ?? "登录失败，请检查用户名和密码");
+        setError(data.error ?? "注册失败，请稍后重试");
         return;
       }
       navigate("/", { replace: true });
@@ -40,18 +47,17 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle>欢迎回来</CardTitle>
-          <CardDescription>登录你的账号</CardDescription>
+          <CardTitle>创建账号</CardTitle>
+          <CardDescription>注册一个本地账号</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {/* Username/password form */}
+        <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="login-username">用户名</Label>
+              <Label htmlFor="reg-username">用户名</Label>
               <Input
-                id="login-username"
+                id="reg-username"
                 type="text"
-                placeholder="用户名"
+                placeholder="3–32 位字母、数字、_ 或 -"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
@@ -60,14 +66,27 @@ export default function Login() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="login-password">密码</Label>
+              <Label htmlFor="reg-password">密码</Label>
               <Input
-                id="login-password"
+                id="reg-password"
                 type="password"
-                placeholder="密码"
+                placeholder="至少 8 位"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
+                autoComplete="new-password"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reg-confirm">确认密码</Label>
+              <Input
+                id="reg-confirm"
+                type="password"
+                placeholder="再输入一次"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
                 required
               />
             </div>
@@ -77,38 +96,14 @@ export default function Login() {
             )}
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "登录"}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "注册"}
             </Button>
           </form>
 
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">或</span>
-            </div>
-          </div>
-
-          {/* Kimi OAuth */}
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              // Redirect to backend-initiated OAuth flow.
-              // The backend generates a CSRF nonce, sets it as an httpOnly cookie,
-              // and redirects to the Kimi authorization endpoint.
-              window.location.href = "/api/oauth/initiate";
-            }}
-          >
-            使用 Kimi 登录
-          </Button>
-
-          <div className="text-center text-sm text-muted-foreground">
-            还没有账号？{" "}
-            <Link to="/register" className="underline underline-offset-4">
-              去注册
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            已有账号？{" "}
+            <Link to="/login" className="underline underline-offset-4">
+              去登录
             </Link>
           </div>
         </CardContent>

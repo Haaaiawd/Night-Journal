@@ -6,6 +6,7 @@ import DiaryDetail from './pages/DiaryDetail'
 import CalendarPage from './pages/CalendarPage'
 import Settings from './pages/Settings'
 import Login from "./pages/Login"
+import Register from "./pages/Register"
 import NotFound from "./pages/NotFound"
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   )

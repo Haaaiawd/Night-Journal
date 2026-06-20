@@ -63,6 +63,8 @@ function makeUser(id: number): User {
   return {
     id,
     unionId: `uid_${id}`,
+    username: null,
+    passwordHash: null,
     name: "Test User",
     email: null,
     avatar: null,

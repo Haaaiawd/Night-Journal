@@ -15,6 +15,9 @@ import {
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
   unionId: varchar("unionId", { length: 255 }).notNull().unique(),
+  // Local auth fields (null for OAuth-only users)
+  username: varchar("username", { length: 64 }).unique(),
+  passwordHash: varchar("password_hash", { length: 255 }),
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 320 }),
   avatar: text("avatar"),
