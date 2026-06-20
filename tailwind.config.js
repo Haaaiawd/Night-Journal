@@ -126,9 +126,9 @@ module.exports = {
       zIndex: {
         'nav': '50',
         'fab': '55',
-        'drawer': '60',
+        'overlay': '60',
+        'drawer': '70',
         'toast': '80',
-        'overlay': '90',
       },
     },
   },

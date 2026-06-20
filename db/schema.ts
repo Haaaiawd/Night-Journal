@@ -142,6 +142,8 @@ export const aiSettings = mysqlTable("ai_settings", {
   diaryStyle: varchar("diary_style", { length: 50 }).default("温柔真实"),
   diaryLength: varchar("diary_length", { length: 20 }).default("中"),
   diaryPromptTemplate: text("diary_prompt_template"),
+  // Per-style editable prompt snippets, stored as JSON: { "温柔真实": "...", "文学感": "..." }
+  stylePrompts: text("style_prompts"),
   // General
   timezone: varchar("timezone", { length: 50 }).default("Asia/Shanghai"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
