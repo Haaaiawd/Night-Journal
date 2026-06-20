@@ -7,7 +7,11 @@ import {
   createEntry,
   updateEntry,
   softDeleteEntry,
+  createAttachment,
 } from "../queries/entries";
+import { findAiSettingsByUserId } from "../queries/ai-settings";
+import { callVisionModel } from "../lib/openai";
+import { readFileAsBase64 } from "../lib/upload";
 
 export const entriesRouter = createRouter({
   // ── queries ──────────────────────────────────────────────────────
@@ -34,16 +38,40 @@ export const entriesRouter = createRouter({
         contentText: z.string().min(1, "Content is required"),
         moodLabel: z.string().max(20).optional(),
         entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+        attachments: z
+          .array(
+            z.object({
+              fileUrl: z.string(),
+              fileType: z.string(),
+              fileName: z.string(),
+              storagePath: z.string(),
+            }),
+          )
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const entry = await createEntry(ctx.user.id, input);
+      const { attachments, ...entryData } = input;
+      const entry = await createEntry(ctx.user.id, entryData);
       if (!entry) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to create entry",
         });
       }
+
+      // Create attachments if provided
+      if (attachments && attachments.length > 0) {
+        for (const att of attachments) {
+          await createAttachment(ctx.user.id, entry.id, att);
+        }
+
+        // Trigger async vision analysis (fire-and-forget)
+        triggerVisionAnalysis(ctx.user.id, entry.id, attachments, input.contentText).catch(
+          (err) => console.error("[vision] Analysis failed:", err),
+        );
+      }
+
       return entry;
     }),
 
@@ -76,3 +104,53 @@ export const entriesRouter = createRouter({
       return { success: true };
     }),
 });
+
+// ── Vision analysis (fire-and-forget) ──────────────────────────────
+
+import { updateAttachmentVision, findAttachmentsByEntryId } from "../queries/entries";
+
+async function triggerVisionAnalysis(
+  userId: number,
+  entryId: number,
+  attachments: Array<{ storagePath: string; fileType: string }>,
+  contextText: string,
+) {
+  const settings = await findAiSettingsByUserId(userId);
+  if (!settings || !settings.enableImageUnderstanding) return;
+  if (!settings.visionApiKey || !settings.visionApiBaseUrl) return;
+
+  const dbAttachments = await findAttachmentsByEntryId(entryId);
+  const prompt = settings.visionPromptTemplate ||
+    "请描述这张图片的内容，并结合以下文字上下文生成适合日记写作的图片素材描述。";
+
+  for (const dbAtt of dbAttachments) {
+    try {
+      const base64 = readFileAsBase64(dbAtt.storagePath);
+      if (!base64) continue;
+
+      const mimeType = dbAtt.fileType || "image/jpeg";
+      const fullPrompt = `${prompt}\n\n关联文字: ${contextText}\n创建时间: ${new Date().toISOString()}`;
+
+      const result = await callVisionModel({
+        apiKey: settings.visionApiKey,
+        baseUrl: settings.visionApiBaseUrl,
+        model: settings.visionModel ?? undefined,
+        prompt: fullPrompt,
+        imageBase64: base64,
+        imageMimeType: mimeType,
+      });
+
+      await updateAttachmentVision(dbAtt.id, {
+        visionStatus: "completed",
+        visionSummary: result,
+        visionModelUsed: settings.visionModel ?? "default",
+        visionContextSnapshot: contextText,
+      });
+    } catch (err) {
+      console.error(`[vision] Failed for attachment ${dbAtt.id}:`, err);
+      await updateAttachmentVision(dbAtt.id, {
+        visionStatus: "failed",
+      });
+    }
+  }
+}

@@ -17,6 +17,8 @@ services:
       KIMI_AUTH_URL: ${KIMI_AUTH_URL:-}
       KIMI_OPEN_URL: ${KIMI_OPEN_URL:-}
       OWNER_UNION_ID: ${OWNER_UNION_ID:-}
+    volumes:
+      - upload_data:/app/data/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -44,3 +46,4 @@ services:
 
 volumes:
   mysql_data:
+  upload_data:
