@@ -650,12 +650,10 @@ export default function Home() {
     async (data: Omit<Fragment, 'id' | 'timestamp'>) => {
       if (!isAuthenticated) return
 
-      const contentText = data.content?.trim()
-      if (!contentText) return
-
+      // Drawer guarantees mood is selected and text is non-empty
       await createEntry.mutateAsync({
-        contentText,
-        moodLabel: data.mood || undefined,
+        contentText: data.content!.trim(),
+        moodLabel: data.mood!,
         entryDate: todayDate,
       })
     },
