@@ -219,15 +219,35 @@ function BottomDrawer({
   const contentRef = useRef<HTMLDivElement>(null)
   const keyboardHeight = useKeyboardHeight()
 
-  // Lock body scroll when drawer is open — overflow only, no position:fixed
-  // (position:fixed causes layout jumps on keyboard show/hide that get
-  //  misinterpreted as clicks on the overlay, closing the drawer)
+  // Lock body scroll when drawer is open.
+  // We avoid position:fixed on the body because it causes layout jumps on
+  // keyboard show/hide that get misinterpreted as clicks on the overlay.
+  // Instead we use overflow + overscroll-behavior on html/body and block
+  // touchmove events outside the drawer's scrollable content area, which
+  // reliably prevents iOS Safari background scroll-through.
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden'
+    if (!open) return
+
+    const html = document.documentElement
+    const body = document.body
+
+    body.style.overflow = 'hidden'
+    html.style.overflow = 'hidden'
+    body.style.overscrollBehavior = 'none'
+    html.style.overscrollBehavior = 'none'
+
+    const preventTouchMove = (e: TouchEvent) => {
+      if (contentRef.current?.contains(e.target as Node)) return
+      e.preventDefault()
     }
+    document.addEventListener('touchmove', preventTouchMove, { passive: false })
+
     return () => {
-      document.body.style.overflow = ''
+      body.style.overflow = ''
+      html.style.overflow = ''
+      body.style.overscrollBehavior = ''
+      html.style.overscrollBehavior = ''
+      document.removeEventListener('touchmove', preventTouchMove)
     }
   }, [open])
 
@@ -370,8 +390,9 @@ function BottomDrawer({
           />
 
           {/* Drawer — sits ABOVE the overlay so its controls are always
-              tappable. Height is a stable 85vh; when the keyboard opens we
-              shift the bottom up by keyboardHeight so the input stays visible. */}
+              tappable. Height is a stable 85vh (max 640px normally); when the
+              keyboard opens we shift bottom up and cap maxHeight to the
+              remaining visible viewport so the header never clips off-screen. */}
           <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
@@ -381,7 +402,9 @@ function BottomDrawer({
             style={{
               bottom: `${keyboardHeight}px`,
               height: '85vh',
-              maxHeight: '640px',
+              maxHeight: keyboardHeight > 0
+                ? `${window.innerHeight - keyboardHeight}px`
+                : '640px',
               backgroundColor: 'var(--bg-elevated)',
               borderRadius: '24px 24px 0 0',
             }}
