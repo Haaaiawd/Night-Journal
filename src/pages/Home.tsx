@@ -289,7 +289,7 @@ function BottomDrawer({
       }
     }
 
-    onSubmit({
+    await onSubmit({
       type: imageFiles.length > 0 ? 'mixed' : 'text',
       content: textValue.trim(),
       images: uploadedAttachments?.map((a) => a.fileUrl),

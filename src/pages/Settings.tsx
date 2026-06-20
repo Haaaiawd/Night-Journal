@@ -619,12 +619,12 @@ function ImageModelTab() {
       })
       setTestMessage(result.message)
       setTestStatus('success')
-      setTimeout(() => setTestStatus('idle'), 5000)
+      setTimeout(() => { setTestStatus('idle'); setTestMessage('') }, 5000)
     } catch (err) {
       const msg = err instanceof Error ? err.message : '连接失败'
       setTestMessage(msg)
       setTestStatus('error')
-      setTimeout(() => setTestStatus('idle'), 8000)
+      setTimeout(() => { setTestStatus('idle'); setTestMessage('') }, 8000)
     }
   }, [apiKey, apiBase, modelName, testVision])
 
@@ -962,12 +962,12 @@ function WriterModelTab() {
       })
       setTestMessage(result.message)
       setTestStatus('success')
-      setTimeout(() => setTestStatus('idle'), 5000)
+      setTimeout(() => { setTestStatus('idle'); setTestMessage('') }, 5000)
     } catch (err) {
       const msg = err instanceof Error ? err.message : '连接失败'
       setTestMessage(msg)
       setTestStatus('error')
-      setTimeout(() => setTestStatus('idle'), 8000)
+      setTimeout(() => { setTestStatus('idle'); setTestMessage('') }, 8000)
     }
   }, [apiKey, apiBase, modelName, testDiary])
 

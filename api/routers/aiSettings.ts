@@ -204,16 +204,18 @@ export const aiSettingsRouter = createRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Preset not found" });
       }
       if (preset.type === "vision") {
-        return updateVisionSettings(ctx.user.id, {
+        const settings = await updateVisionSettings(ctx.user.id, {
           visionApiBaseUrl: preset.apiBaseUrl ?? undefined,
           visionApiKey: preset.apiKey ?? undefined,
           visionModel: preset.model ?? undefined,
         });
+        return { ...settings, visionApiKey: undefined, diaryApiKey: undefined };
       }
-      return updateDiarySettings(ctx.user.id, {
+      const settings = await updateDiarySettings(ctx.user.id, {
         diaryApiBaseUrl: preset.apiBaseUrl ?? undefined,
         diaryApiKey: preset.apiKey ?? undefined,
         diaryModel: preset.model ?? undefined,
       });
+      return { ...settings, visionApiKey: undefined, diaryApiKey: undefined };
     }),
 });
