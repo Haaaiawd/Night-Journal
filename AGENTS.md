@@ -79,8 +79,10 @@
 
 ## 当前状态
 
-- **最近一次更新**: 2025 — 安全审查 + 功能修复（初始 GitHub 发布前）
-- **数据库迁移**: 字段重命名 `encrypted_vision_api_key` → `vision_api_key`，`encrypted_diary_api_key` → `diary_api_key`，需要重新生成 Drizzle migration
+- **最近一次更新**: 2025 — 安全审查 + 功能修复 + Docker 支持（已推送 GitHub）
+- **数据库迁移**: 字段已重命名 `encrypted_vision_api_key` → `vision_api_key`，`encrypted_diary_api_key` → `diary_api_key`，migration 已生成
+- **部署方式**: Docker 多阶段构建（`node:22-alpine`），`docker-compose.yml` 含 MySQL 8.4 服务
+- **测试状态**: 40 个单元测试全部通过（vitest），覆盖 OAuth、JWT、env、diaries.delete
 
 ---
 
@@ -164,7 +166,9 @@ Night-Journal/
 ├── contracts/
 │   ├── constants.ts        # 路径常量 + OAuth/Session 配置
 │   └── errors.ts           # 错误码
-└── .env.example            # 必填环境变量模板
+├── Dockerfile              # 多阶段构建：builder → runner (node:22-alpine)
+├── docker-compose.yml      # app + mysql:8.4，含 healthcheck
+└── .env.example            # 环境变量模板（含 Docker Compose 专用变量）
 ```
 
 ---
@@ -212,16 +216,15 @@ Night-Journal/
 
 ```env
 APP_ID=               # Kimi 应用 ID
-APP_SECRET=           # Kimi 应用密钥（用于 JWT 签名）
-DATABASE_URL=         # MySQL 连接串
-KIMI_AUTH_URL=        # Kimi OAuth 服务地址
-KIMI_OPEN_URL=        # Kimi Open API 地址
-OWNER_UNION_ID=       # 管理员 union_id（可选）
-
-# 前端（Vite）— 仅用于非敏感展示，OAuth 流由后端发起
-VITE_KIMI_AUTH_URL=   # 同 KIMI_AUTH_URL（已不再用于构造 OAuth URL）
-VITE_APP_ID=          # 同 APP_ID
+APP_SECRET=           # Kimi 应用密钥（用于 JWT 签名，至少 32 位随机字符串）
+DATABASE_URL=         # MySQL 连接串，例：mysql://user:pass@host:3306/db
+KIMI_AUTH_URL=        # Kimi OAuth 服务地址（默认 https://kimi.moonshot.cn）
+KIMI_OPEN_URL=        # Kimi Open API 地址（默认 https://api.moonshot.cn）
+OWNER_UNION_ID=       # 管理员 union_id（可选，留空则无管理员）
+PORT=                 # 监听端口（可选，默认 3000）
 ```
+
+完整示例见 `.env.example`。`VITE_*` 变量已废弃，前端不使用 Vite 环境变量。
 
 <!-- AUTO:END -->
 

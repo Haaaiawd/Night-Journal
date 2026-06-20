@@ -33,12 +33,10 @@ cp .env.example .env
 # 3. 初次启动（构建镜像 + 启动 MySQL + 启动 app）
 docker compose up -d --build
 
-# 4. 推送数据库 schema（仅首次或 schema 变更后需要）
-docker compose exec app node -e "
-  const { drizzle } = await import('drizzle-orm/mysql2');
-  // 使用 drizzle-kit push 推送 schema
-"
-# 或者本地执行（需要能访问到 MySQL）：
+# 4. 推送数据库 schema（仅首次，或 schema 变更后）
+#    runner 镜像不含 drizzle-kit，在宿主机本地执行即可
+#    （db 的 3306 端口已映射到宿主机）
+npm install  # 确保本地有 drizzle-kit
 DATABASE_URL=mysql://nightjournal:nightjournal@localhost:3306/nightjournal npm run db:push
 
 # 5. 查看日志
