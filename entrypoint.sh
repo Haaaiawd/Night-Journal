@@ -8,7 +8,7 @@
 set -e
 
 echo "[entrypoint] Running database migrations…"
-node_modules/.bin/drizzle-kit migrate
+node_modules/.bin/drizzle-kit push
 
 echo "[entrypoint] Migrations done. Starting app…"
 exec node dist/boot.js
