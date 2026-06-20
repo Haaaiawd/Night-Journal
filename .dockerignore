@@ -1,5 +1,27 @@
 node_modules
 dist
 .git
-*.swp
+.gitignore
+
+# Environment files — never bake secrets into the image
+.env
+.env.*
+!.env.example
+
+# Dev/test artifacts
+coverage
+.nyc_output
 *.log
+*.tsbuildinfo
+
+# Editor & OS noise
+.DS_Store
+*.swp
+.vscode
+.idea
+
+# CI & tooling configs not needed at runtime
+.github
+.devin
+.anws
+.opencode
