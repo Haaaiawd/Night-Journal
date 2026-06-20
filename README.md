@@ -1,73 +1,79 @@
-# React + TypeScript + Vite
+# Night-Journal 夜间日记
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个用 Kimi OAuth 登录的移动端日记 app。记录每日碎片，AI 生成日记。
 
-Currently, two official plugins are available:
+## 技术栈
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+| 层 | 技术 |
+|---|---|
+| 前端 | React 19, React Router v7, TanStack Query, Framer Motion, Tailwind CSS, shadcn/ui |
+| 后端 | Hono, tRPC v11, Drizzle ORM |
+| 数据库 | MySQL |
+| 认证 | Kimi OAuth 2.0 + JWT (HS256, 30天) |
+| 打包 | Vite + tsx |
 
-## React Compiler
+## 快速开始
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+# 安装依赖
+npm install
 
-## Expanding the ESLint configuration
+# 复制并填写环境变量
+cp .env.example .env
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# 推送数据库 schema
+npm run db:push
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# 启动开发服务器
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 环境变量
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```env
+APP_ID=               # Kimi 应用 ID
+APP_SECRET=           # Kimi 应用密钥
+DATABASE_URL=         # MySQL 连接串
+KIMI_AUTH_URL=        # Kimi OAuth 服务地址
+KIMI_OPEN_URL=        # Kimi Open API 地址
 ```
+
+## 开发命令
+
+```bash
+npm run dev          # 启动前后端
+npm run check        # TypeScript 类型检查
+npm test             # 运行测试
+npm run db:generate  # 生成 migration
+npm run db:push      # 推送 schema 到数据库
+npm run db:studio    # Drizzle Studio 可视化
+```
+
+## 测试
+
+```bash
+npm test
+```
+
+40 个单元测试覆盖：OAuth CSRF 防护、JWT 签发/验证、env 验证逻辑、diaries.delete ownership 校验。
+
+AI API key 连通性测试（需填入 `DEEPSEEK_API_KEY` 到 `.env.test`）：
+
+```bash
+# .env.test
+DEEPSEEK_API_KEY=sk-...
+```
+
+## 功能现状
+
+- [x] Kimi OAuth 2.0 登录（CSRF 防护）
+- [x] 今日碎片记录（文字 + 情绪）
+- [x] 日记列表 / 详情 / 删除
+- [x] AI 设置（自定义模型 API Key）
+- [ ] 图片上传（需接入 OSS）
+- [ ] AI 日记生成（需接入 LLM API）
+- [ ] API Key 加密存储
+
+## 项目结构
+
+详见 [AGENTS.md](./AGENTS.md)。
