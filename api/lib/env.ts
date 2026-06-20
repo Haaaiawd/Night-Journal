@@ -16,12 +16,19 @@ function required(name: string): string {
   return value;
 }
 
+/** For Kimi OAuth variables — only required when OAuth is actually used. */
+function optional(name: string): string {
+  return process.env[name] ?? "";
+}
+
 export const env = {
-  appId: required("APP_ID"),
+  // Core — always required
   appSecret: required("APP_SECRET"),
   isProduction,
   databaseUrl: required("DATABASE_URL"),
-  kimiAuthUrl: required("KIMI_AUTH_URL"),
-  kimiOpenUrl: required("KIMI_OPEN_URL"),
+  // Kimi OAuth — optional; leave blank if only using username/password login
+  appId: optional("APP_ID"),
+  kimiAuthUrl: optional("KIMI_AUTH_URL"),
+  kimiOpenUrl: optional("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
 };

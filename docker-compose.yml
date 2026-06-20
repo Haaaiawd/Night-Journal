@@ -9,11 +9,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${PORT:-3000}
-      APP_ID: ${APP_ID}
+      # Required
       APP_SECRET: ${APP_SECRET}
       DATABASE_URL: ${DATABASE_URL:-mysql://nightjournal:nightjournal@db:3306/nightjournal}
-      KIMI_AUTH_URL: ${KIMI_AUTH_URL}
-      KIMI_OPEN_URL: ${KIMI_OPEN_URL}
+      # Optional — only needed if you want Kimi OAuth login
+      APP_ID: ${APP_ID:-}
+      KIMI_AUTH_URL: ${KIMI_AUTH_URL:-}
+      KIMI_OPEN_URL: ${KIMI_OPEN_URL:-}
       OWNER_UNION_ID: ${OWNER_UNION_ID:-}
     depends_on:
       db:
