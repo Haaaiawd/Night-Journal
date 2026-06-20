@@ -10,10 +10,6 @@ import {
   Moon,
   Zap,
   Wind,
-  FileText,
-  AlignLeft,
-  Image,
-  Smile,
 } from 'lucide-react'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
@@ -34,7 +30,6 @@ interface Fragment {
 }
 
 type MoodKey = 'happy' | 'calm' | 'sad' | 'tired' | 'excited' | 'anxious'
-type DrawerTab = 'text' | 'longtext' | 'image' | 'mood'
 
 // ──────────────────────────────────────────────────────────
 // Constants
@@ -54,13 +49,6 @@ const MOODS: { key: MoodKey; label: string; Icon: React.ComponentType<{ size?: n
   { key: 'tired', label: '疲惫', Icon: Moon, color: '#A08E8E' },
   { key: 'excited', label: '兴奋', Icon: Zap, color: '#C4826A' },
   { key: 'anxious', label: '焦虑', Icon: Wind, color: '#9B8AA5' },
-]
-
-const TAB_CONFIG: { key: DrawerTab; label: string; Icon: React.ComponentType<{ size?: number }> }[] = [
-  { key: 'text', label: '文字', Icon: FileText },
-  { key: 'longtext', label: '长文本', Icon: AlignLeft },
-  { key: 'image', label: '图片', Icon: Image },
-  { key: 'mood', label: '情绪', Icon: Smile },
 ]
 
 const DRAWER_SPRING = { damping: 30, stiffness: 300 }
@@ -206,16 +194,12 @@ function BottomDrawer({
   onClose: () => void
   onSubmit: (fragment: Omit<Fragment, 'id' | 'timestamp'>) => void
 }) {
-  const [tab, setTab] = useState<DrawerTab>('text')
-  const [textValue, setTextValue] = useState('')
-  const [longTextValue, setLongTextValue] = useState('')
   const [selectedMood, setSelectedMood] = useState<MoodKey | null>(null)
-  const [moodNote, setMoodNote] = useState('')
+  const [textValue, setTextValue] = useState('')
   const [images, setImages] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const dragAreaRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const keyboardHeight = useKeyboardHeight()
 
@@ -252,14 +236,11 @@ function BottomDrawer({
   }, [open])
 
   const resetState = useCallback(() => {
-    setTextValue('')
-    setLongTextValue('')
     setSelectedMood(null)
-    setMoodNote('')
+    setTextValue('')
     setImages([])
     setIsSubmitting(false)
     setShowSuccess(false)
-    setTab('text')
   }, [])
 
   const handleClose = useCallback(() => {
@@ -268,93 +249,31 @@ function BottomDrawer({
   }, [onClose, resetState])
 
   const handleSubmit = useCallback(async () => {
-    let content = ''
-    let type: Fragment['type'] = 'text'
-    let mood = selectedMood
-    let fragmentImages: string[] | undefined
-
-    switch (tab) {
-      case 'text':
-        if (!textValue.trim()) return
-        content = textValue.trim()
-        type = 'text'
-        break
-      case 'longtext':
-        if (!longTextValue.trim()) return
-        content = longTextValue.trim()
-        type = 'text'
-        break
-      case 'image':
-        if (images.length === 0) return
-        fragmentImages = images
-        type = 'image'
-        break
-      case 'mood':
-        if (!selectedMood) return
-        content = moodNote.trim()
-        type = selectedMood ? 'text' : 'text'
-        break
-    }
+    if (!selectedMood || !textValue.trim()) return
 
     setIsSubmitting(true)
     await new Promise((r) => setTimeout(r, 300))
 
     onSubmit({
-      type,
-      content: content || undefined,
-      images: fragmentImages,
-      mood: mood || undefined,
+      type: images.length > 0 ? 'mixed' : 'text',
+      content: textValue.trim(),
+      images: images.length > 0 ? images : undefined,
+      mood: selectedMood,
     })
 
     setIsSubmitting(false)
     setShowSuccess(true)
     await new Promise((r) => setTimeout(r, 400))
     handleClose()
-  }, [tab, textValue, longTextValue, selectedMood, moodNote, images, onSubmit, handleClose])
+  }, [selectedMood, textValue, images, onSubmit, handleClose])
 
-  const canSubmit =
-    (tab === 'text' && textValue.trim().length > 0) ||
-    (tab === 'longtext' && longTextValue.trim().length > 0) ||
-    (tab === 'image' && images.length > 0) ||
-    (tab === 'mood' && selectedMood !== null)
+  const canSubmit = selectedMood !== null && textValue.trim().length > 0
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files
       if (!files) return
       Array.from(files).forEach((file) => {
-        if (images.length >= 9) return
-        const url = URL.createObjectURL(file)
-        setImages((prev) => [...prev, url])
-      })
-    },
-    [images.length]
-  )
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    if (dragAreaRef.current) {
-      dragAreaRef.current.style.borderColor = 'var(--accent)'
-    }
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    if (dragAreaRef.current) {
-      dragAreaRef.current.style.borderColor = 'var(--divider)'
-    }
-  }, [])
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      if (dragAreaRef.current) {
-        dragAreaRef.current.style.borderColor = 'var(--divider)'
-      }
-      const files = Array.from(e.dataTransfer.files).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      files.forEach((file) => {
         if (images.length >= 9) return
         const url = URL.createObjectURL(file)
         setImages((prev) => [...prev, url])
@@ -434,271 +353,173 @@ function BottomDrawer({
               </button>
             </div>
 
-            {/* Tab bar */}
-            <div
-              className="mx-5 mb-4 flex gap-1 rounded-xl p-1"
-              style={{ backgroundColor: 'var(--bg-surface)' }}
-            >
-              {TAB_CONFIG.map(({ key, label, Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setTab(key)}
-                  className="flex flex-1 items-center justify-center gap-1 rounded-lg py-2.5 text-sm font-medium transition-colors duration-200"
-                  style={{
-                    backgroundColor:
-                      tab === key ? 'var(--bg-elevated)' : 'transparent',
-                    color:
-                      tab === key
-                        ? 'var(--text-primary)'
-                        : 'var(--text-tertiary)',
-                  }}
-                >
-                  <Icon size={16} />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Content area */}
+            {/* Content area — unified form: mood (required) → text (required) → images (optional) */}
             <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
-              <AnimatePresence mode="wait">
-                {/* ── Text Tab ── */}
-                {tab === 'text' && (
-                  <motion.div
-                    key="text"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    <textarea
-                      autoFocus
-                      value={textValue}
-                      onChange={(e) => setTextValue(e.target.value)}
-                      onFocus={(e) => {
-                        setTimeout(() => {
-                          e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                        }, 300)
-                      }}
-                      placeholder="此刻在想什么..."
-                      className="w-full resize-none rounded-xl border p-4 font-body text-[15px] leading-relaxed outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+              {/* ── Step 1: Mood (required) ── */}
+              <div className="mb-2 flex items-center gap-2">
+                <span
+                  className="text-xs font-medium"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  心情
+                </span>
+                <span
+                  className="text-xs"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  ·必选
+                </span>
+              </div>
+              <div className="mb-5 grid grid-cols-3 gap-2">
+                {MOODS.map(({ key, label, Icon, color }) => {
+                  const isSelected = selectedMood === key
+                  return (
+                    <motion.button
+                      key={key}
+                      onClick={() => setSelectedMood(key)}
+                      whileTap={{ scale: 1.05 }}
+                      className="flex flex-col items-center gap-1.5 rounded-xl border py-3 transition-colors duration-200"
                       style={{
-                        backgroundColor: 'var(--bg-surface)',
-                        borderColor: 'var(--divider)',
-                        color: 'var(--text-primary)',
-                        minHeight: '120px',
-                        maxHeight: '200px',
+                        backgroundColor: isSelected
+                          ? `${color}26`
+                          : 'var(--bg-surface)',
+                        borderColor: isSelected ? color : 'var(--divider)',
+                        borderWidth: isSelected ? '1.5px' : '1px',
                       }}
-                      rows={3}
-                    />
-                    {textValue.length > 50 && (
-                      <p
-                        className="mt-1 text-right text-xs font-ui"
-                        style={{ color: 'var(--text-tertiary)' }}
-                      >
-                        {textValue.length} 字
-                      </p>
-                    )}
-                  </motion.div>
-                )}
-
-                {/* ── Long Text Tab ── */}
-                {tab === 'longtext' && (
-                  <motion.div
-                    key="longtext"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    <textarea
-                      autoFocus
-                      value={longTextValue}
-                      onChange={(e) => setLongTextValue(e.target.value)}
-                      onFocus={(e) => {
-                        setTimeout(() => {
-                          e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                        }, 300)
-                      }}
-                      placeholder="把今天的故事写下来..."
-                      className="w-full resize-none rounded-xl border p-4 font-body text-[15px] leading-relaxed outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
-                      style={{
-                        backgroundColor: 'var(--bg-surface)',
-                        borderColor: 'var(--divider)',
-                        color: 'var(--text-primary)',
-                        minHeight: '200px',
-                        maxHeight: '320px',
-                      }}
-                      rows={6}
-                    />
-                    <p
-                      className="mt-1 text-right text-xs font-ui"
-                      style={{ color: 'var(--text-tertiary)' }}
                     >
-                      {longTextValue.length} 字
-                    </p>
-                  </motion.div>
-                )}
-
-                {/* ── Image Tab ── */}
-                {tab === 'image' && (
-                  <motion.div
-                    key="image"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    {images.length === 0 ? (
-                      <div
-                        ref={dragAreaRef}
-                        onClick={() => fileInputRef.current?.click()}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-12 transition-colors duration-200 hover:border-[var(--accent)]"
-                        style={{ borderColor: 'var(--divider)' }}
+                      <span style={{ color }}>
+                        <Icon size={22} strokeWidth={2} />
+                      </span>
+                      <span
+                        className="text-xs font-medium"
+                        style={{
+                          color: isSelected ? color : 'var(--text-primary)',
+                        }}
                       >
-                        <ImagePlus
-                          size={48}
-                          style={{ color: 'var(--text-tertiary)' }}
-                        />
-                        <p
-                          className="mt-3 text-sm font-ui"
-                          style={{ color: 'var(--text-secondary)' }}
-                        >
-                          点击或拖拽上传图片
-                        </p>
-                        <p
-                          className="mt-1 text-xs font-ui"
-                          style={{ color: 'var(--text-tertiary)' }}
-                        >
-                          支持 JPG, PNG, HEIC
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {images.map((img, i) => (
-                            <div
-                              key={i}
-                              className="relative aspect-square overflow-hidden rounded-xl"
-                            >
-                              <img
-                                src={img}
-                                alt={`预览 ${i + 1}`}
-                                className="h-full w-full object-cover"
-                              />
-                              <button
-                                onClick={() => removeImage(i)}
-                                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white"
-                              >
-                                <X size={12} />
-                              </button>
-                            </div>
-                          ))}
-                          {images.length < 9 && (
-                            <button
-                              onClick={() => fileInputRef.current?.click()}
-                              className="flex aspect-square items-center justify-center rounded-xl border-2 border-dashed"
-                              style={{ borderColor: 'var(--divider)' }}
-                            >
-                              <Plus
-                                size={24}
-                                style={{ color: 'var(--text-tertiary)' }}
-                              />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileSelect}
-                    />
-                  </motion.div>
-                )}
+                        {label}
+                      </span>
+                    </motion.button>
+                  )
+                })}
+              </div>
 
-                {/* ── Mood Tab ── */}
-                {tab === 'mood' && (
-                  <motion.div
-                    key="mood"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
+              {/* ── Step 2: Text (required) ── */}
+              <div className="mb-2 flex items-center gap-2">
+                <span
+                  className="text-xs font-medium"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  记录
+                </span>
+                <span
+                  className="text-xs"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  ·必填
+                </span>
+              </div>
+              <textarea
+                value={textValue}
+                onChange={(e) => setTextValue(e.target.value)}
+                onFocus={(e) => {
+                  setTimeout(() => {
+                    e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                  }, 300)
+                }}
+                placeholder="此刻在想什么..."
+                className="w-full resize-none rounded-xl border p-4 font-body text-[15px] leading-relaxed outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  borderColor: 'var(--divider)',
+                  color: 'var(--text-primary)',
+                  minHeight: '120px',
+                  maxHeight: '240px',
+                }}
+                rows={4}
+              />
+              {textValue.length > 0 && (
+                <p
+                  className="mt-1 text-right text-xs font-ui"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  {textValue.length} 字
+                </p>
+              )}
+
+              {/* ── Step 3: Images (optional) ── */}
+              <div className="mb-2 mt-5 flex items-center gap-2">
+                <span
+                  className="text-xs font-medium"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  图片
+                </span>
+                <span
+                  className="text-xs"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  ·可选
+                </span>
+              </div>
+              {images.length === 0 ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-colors duration-200"
+                  style={{ borderColor: 'var(--divider)' }}
+                >
+                  <ImagePlus size={36} style={{ color: 'var(--text-tertiary)' }} />
+                  <p
+                    className="mt-2 text-sm font-ui"
+                    style={{ color: 'var(--text-secondary)' }}
                   >
-                    <div className="grid grid-cols-2 gap-3">
-                      {MOODS.map(({ key, label, Icon, color }) => {
-                        const isSelected = selectedMood === key
-                        return (
-                          <motion.button
-                            key={key}
-                            onClick={() => setSelectedMood(key)}
-                            whileTap={{ scale: 1.05 }}
-                            className="flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-colors duration-200"
-                            style={{
-                              backgroundColor: isSelected
-                                ? `${color}26`
-                                : 'var(--bg-surface)',
-                              borderColor: isSelected ? color : 'var(--divider)',
-                              borderWidth: isSelected ? '1.5px' : '1px',
-                            }}
-                          >
-                            <span style={{ color }}>
-                              <Icon
-                                size={24}
-                                strokeWidth={2}
-                              />
-                            </span>
-                            <span
-                              className="text-sm font-medium"
-                              style={{
-                                color: isSelected
-                                  ? color
-                                  : 'var(--text-primary)',
-                              }}
-                            >
-                              {label}
-                            </span>
-                          </motion.button>
-                        )
-                      })}
+                    点击上传图片
+                  </p>
+                  <p
+                    className="mt-0.5 text-xs font-ui"
+                    style={{ color: 'var(--text-tertiary)' }}
+                  >
+                    支持 JPG, PNG, HEIC
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {images.map((img, i) => (
+                    <div
+                      key={i}
+                      className="relative aspect-square overflow-hidden rounded-xl"
+                    >
+                      <img
+                        src={img}
+                        alt={`预览 ${i + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                      <button
+                        onClick={() => removeImage(i)}
+                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white"
+                      >
+                        <X size={12} />
+                      </button>
                     </div>
-                    {selectedMood && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="mt-4"
-                      >
-                        <textarea
-                          value={moodNote}
-                          onChange={(e) => setMoodNote(e.target.value)}
-                          onFocus={(e) => {
-                            setTimeout(() => {
-                              e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                            }, 300)
-                          }}
-                          placeholder="备注...（可选）"
-                          className="w-full resize-none rounded-xl border p-4 font-body text-[15px] leading-relaxed outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
-                          style={{
-                            backgroundColor: 'var(--bg-surface)',
-                            borderColor: 'var(--divider)',
-                            color: 'var(--text-primary)',
-                            minHeight: '80px',
-                          }}
-                          rows={2}
-                        />
-                      </motion.div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  ))}
+                  {images.length < 9 && (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex aspect-square items-center justify-center rounded-xl border-2 border-dashed"
+                      style={{ borderColor: 'var(--divider)' }}
+                    >
+                      <Plus size={24} style={{ color: 'var(--text-tertiary)' }} />
+                    </button>
+                  )}
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+              />
             </div>
 
             {/* Submit button */}
@@ -742,9 +563,7 @@ function BottomDrawer({
                     保存中...
                   </span>
                 ) : (
-                  <span>
-                    {tab === 'mood' ? '保存情绪' : '保存'}
-                  </span>
+                  <span>保存</span>
                 )}
               </motion.button>
             </div>
@@ -831,12 +650,10 @@ export default function Home() {
     async (data: Omit<Fragment, 'id' | 'timestamp'>) => {
       if (!isAuthenticated) return
 
-      const contentText = data.content?.trim() || (data.mood ? `[情绪: ${data.mood}]` : '')
-      if (!contentText && (!data.images || data.images.length === 0)) return
-
+      // Drawer guarantees mood is selected and text is non-empty
       await createEntry.mutateAsync({
-        contentText: contentText || '(图片)',
-        moodLabel: data.mood || undefined,
+        contentText: data.content!.trim(),
+        moodLabel: data.mood!,
         entryDate: todayDate,
       })
     },
