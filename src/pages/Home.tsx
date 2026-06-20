@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 import { format } from 'date-fns'
 
 // ──────────────────────────────────────────────────────────
@@ -215,6 +216,24 @@ function BottomDrawer({
   const [showSuccess, setShowSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragAreaRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const keyboardHeight = useKeyboardHeight()
+
+  // Lock body scroll when drawer is open to prevent iOS pushing the page
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
+      document.body.style.height = '100%'
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+      document.body.style.height = ''
+    }
+  }, [open])
 
   const resetState = useCallback(() => {
     setTextValue('')
@@ -357,10 +376,11 @@ function BottomDrawer({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={DRAWER_SPRING}
-            className="fixed bottom-0 left-0 right-0 z-drawer mx-auto max-w-[480px]"
+            className="fixed left-0 right-0 z-drawer mx-auto flex max-w-[480px] flex-col"
             style={{
-              height: '85vh',
-              maxHeight: '640px',
+              bottom: `${keyboardHeight}px`,
+              height: keyboardHeight > 0 ? `${window.visualViewport?.height ?? window.innerHeight}px` : '85vh',
+              maxHeight: keyboardHeight > 0 ? 'none' : '640px',
               backgroundColor: 'var(--bg-elevated)',
               borderRadius: '24px 24px 0 0',
             }}
@@ -416,7 +436,7 @@ function BottomDrawer({
             </div>
 
             {/* Content area */}
-            <div className="flex-1 overflow-y-auto px-5 pb-4">
+            <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
               <AnimatePresence mode="wait">
                 {/* ── Text Tab ── */}
                 {tab === 'text' && (
@@ -431,6 +451,11 @@ function BottomDrawer({
                       autoFocus
                       value={textValue}
                       onChange={(e) => setTextValue(e.target.value)}
+                      onFocus={(e) => {
+                        setTimeout(() => {
+                          e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                        }, 300)
+                      }}
                       placeholder="此刻在想什么..."
                       className="w-full resize-none rounded-xl border p-4 font-body text-[15px] leading-relaxed outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
                       style={{
@@ -466,6 +491,11 @@ function BottomDrawer({
                       autoFocus
                       value={longTextValue}
                       onChange={(e) => setLongTextValue(e.target.value)}
+                      onFocus={(e) => {
+                        setTimeout(() => {
+                          e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                        }, 300)
+                      }}
                       placeholder="把今天的故事写下来..."
                       className="w-full resize-none rounded-xl border p-4 font-body text-[15px] leading-relaxed outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
                       style={{
@@ -625,6 +655,11 @@ function BottomDrawer({
                         <textarea
                           value={moodNote}
                           onChange={(e) => setMoodNote(e.target.value)}
+                          onFocus={(e) => {
+                            setTimeout(() => {
+                              e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                            }, 300)
+                          }}
                           placeholder="备注...（可选）"
                           className="w-full resize-none rounded-xl border p-4 font-body text-[15px] leading-relaxed outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
                           style={{
