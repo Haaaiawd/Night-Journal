@@ -29,6 +29,13 @@ interface Fragment {
   timestamp: string
 }
 
+interface UploadedAttachment {
+  fileUrl: string
+  fileType: string
+  fileName: string
+  storagePath: string
+}
+
 type MoodKey = 'happy' | 'calm' | 'sad' | 'tired' | 'excited' | 'anxious'
 
 // ──────────────────────────────────────────────────────────
@@ -192,11 +199,12 @@ function BottomDrawer({
 }: {
   open: boolean
   onClose: () => void
-  onSubmit: (fragment: Omit<Fragment, 'id' | 'timestamp'>) => void
+  onSubmit: (fragment: Omit<Fragment, 'id' | 'timestamp'>, attachments?: UploadedAttachment[]) => void
 }) {
   const [selectedMood, setSelectedMood] = useState<MoodKey | null>(null)
   const [textValue, setTextValue] = useState('')
   const [images, setImages] = useState<string[]>([])
+  const [imageFiles, setImageFiles] = useState<File[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -239,6 +247,7 @@ function BottomDrawer({
     setSelectedMood(null)
     setTextValue('')
     setImages([])
+    setImageFiles([])
     setIsSubmitting(false)
     setShowSuccess(false)
   }, [])
@@ -252,20 +261,46 @@ function BottomDrawer({
     if (!selectedMood || !textValue.trim()) return
 
     setIsSubmitting(true)
-    await new Promise((r) => setTimeout(r, 300))
 
-    onSubmit({
-      type: images.length > 0 ? 'mixed' : 'text',
+    // Upload image files to the server
+    let uploadedAttachments: UploadedAttachment[] | undefined
+    if (imageFiles.length > 0) {
+      uploadedAttachments = []
+      for (const file of imageFiles) {
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+          const res = await fetch('/api/upload/file', {
+            method: 'POST',
+            body: formData,
+          })
+          if (res.ok) {
+            const data = await res.json()
+            uploadedAttachments.push({
+              fileUrl: data.fileUrl,
+              fileType: file.type,
+              fileName: data.fileName,
+              storagePath: data.storagePath,
+            })
+          }
+        } catch (err) {
+          console.error('[Home] Failed to upload image:', err)
+        }
+      }
+    }
+
+    await onSubmit({
+      type: imageFiles.length > 0 ? 'mixed' : 'text',
       content: textValue.trim(),
-      images: images.length > 0 ? images : undefined,
+      images: uploadedAttachments?.map((a) => a.fileUrl),
       mood: selectedMood,
-    })
+    }, uploadedAttachments)
 
     setIsSubmitting(false)
     setShowSuccess(true)
     await new Promise((r) => setTimeout(r, 400))
     handleClose()
-  }, [selectedMood, textValue, images, onSubmit, handleClose])
+  }, [selectedMood, textValue, imageFiles, onSubmit, handleClose])
 
   const canSubmit = selectedMood !== null && textValue.trim().length > 0
 
@@ -277,6 +312,7 @@ function BottomDrawer({
         if (images.length >= 9) return
         const url = URL.createObjectURL(file)
         setImages((prev) => [...prev, url])
+        setImageFiles((prev) => [...prev, file])
       })
     },
     [images.length]
@@ -284,6 +320,11 @@ function BottomDrawer({
 
   const removeImage = useCallback((index: number) => {
     setImages((prev) => {
+      const next = [...prev]
+      next.splice(index, 1)
+      return next
+    })
+    setImageFiles((prev) => {
       const next = [...prev]
       next.splice(index, 1)
       return next
@@ -610,14 +651,19 @@ export default function Home() {
   })
 
   // Convert server entries to the local Fragment type for rendering
-  const serverFragments: Fragment[] = serverEntries.map((entry) => ({
-    id: String(entry.id),
-    type: entry.hasImages ? 'image' : 'text',
-    content: entry.contentText || undefined,
-    images: undefined, // images are loaded via attachments; not shown here as blob URLs
-    mood: (entry.moodLabel as MoodKey) || undefined,
-    timestamp: formatTime(entry.createdAt), // use actual creation time, not current time
-  }))
+  const serverFragments: Fragment[] = serverEntries.map((entry) => {
+    const attachmentUrls = (entry as { attachments?: Array<{ fileUrl: string }> }).attachments
+      ?.map((a) => a.fileUrl)
+      .filter(Boolean)
+    return {
+      id: String(entry.id),
+      type: entry.hasImages ? (entry.contentText ? 'mixed' : 'image') : 'text',
+      content: entry.contentText || undefined,
+      images: attachmentUrls && attachmentUrls.length > 0 ? attachmentUrls : undefined,
+      mood: (entry.moodLabel as MoodKey) || undefined,
+      timestamp: formatTime(entry.createdAt),
+    }
+  })
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [promptIndex, setPromptIndex] = useState(0)
@@ -645,16 +691,15 @@ export default function Home() {
     }
   }, [])
 
-  // Persist entry to backend; image-only entries are not yet supported (upload TODO)
   const handleAddFragment = useCallback(
-    async (data: Omit<Fragment, 'id' | 'timestamp'>) => {
+    async (data: Omit<Fragment, 'id' | 'timestamp'>, attachments?: UploadedAttachment[]) => {
       if (!isAuthenticated) return
 
-      // Drawer guarantees mood is selected and text is non-empty
       await createEntry.mutateAsync({
         contentText: data.content!.trim(),
         moodLabel: data.mood!,
         entryDate: todayDate,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined,
       })
     },
     [isAuthenticated, createEntry, todayDate],

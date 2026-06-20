@@ -155,3 +155,23 @@ export const aiSettings = mysqlTable("ai_settings", {
 
 export type AiSettings = typeof aiSettings.$inferSelect;
 export type InsertAiSettings = typeof aiSettings.$inferInsert;
+
+// ─── Model Presets — saved API configurations for quick switching ───
+
+export const modelPresets = mysqlTable("model_presets", {
+  id: serial("id").primaryKey(),
+  userId: bigint("user_id", { mode: "number", unsigned: true }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  type: mysqlEnum("type", ["vision", "diary"]).notNull(),
+  apiBaseUrl: varchar("api_base_url", { length: 500 }),
+  apiKey: text("api_key"),
+  model: varchar("model", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type ModelPreset = typeof modelPresets.$inferSelect;
+export type InsertModelPreset = typeof modelPresets.$inferInsert;

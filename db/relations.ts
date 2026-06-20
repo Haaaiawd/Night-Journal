@@ -5,6 +5,7 @@ import {
   entryAttachments,
   diaries,
   diaryVersions,
+  modelPresets,
 } from "./schema";
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -12,6 +13,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   entryAttachments: many(entryAttachments),
   diaries: many(diaries),
   diaryVersions: many(diaryVersions),
+  modelPresets: many(modelPresets),
 }));
 
 export const entriesRelations = relations(entries, ({ one, many }) => ({
@@ -42,6 +44,13 @@ export const diaryVersionsRelations = relations(diaryVersions, ({ one }) => ({
   }),
   user: one(users, {
     fields: [diaryVersions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const modelPresetsRelations = relations(modelPresets, ({ one }) => ({
+  user: one(users, {
+    fields: [modelPresets.userId],
     references: [users.id],
   }),
 }));

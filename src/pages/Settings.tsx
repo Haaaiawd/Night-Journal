@@ -24,6 +24,8 @@ import {
   ChevronRight,
   Sparkles,
   RotateCcw,
+  Save,
+  FolderOpen,
 } from 'lucide-react'
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -125,6 +127,180 @@ const TABS: TabDef[] = [
   { id: 'theme', label: '主题', Icon: Palette },
   { id: 'data', label: '数据', Icon: Database },
 ]
+
+/* ═══════════════════════════════════════════
+   Preset Manager Component
+   ═══════════════════════════════════════════ */
+function PresetManager({
+  type,
+  currentApiBase,
+  currentApiKey,
+  currentModel,
+  onLoadPreset,
+}: {
+  type: 'vision' | 'diary'
+  currentApiBase: string
+  currentApiKey: string
+  currentModel: string
+  onLoadPreset: (preset: { apiBaseUrl: string | null; apiKey: string | null; model: string | null }) => void
+}) {
+  const utils = trpc.useUtils()
+  const { data: allPresets } = trpc.aiSettings.listPresets.useQuery()
+  const createPresetMutation = trpc.aiSettings.createPreset.useMutation({
+    onSuccess: () => utils.aiSettings.listPresets.invalidate(),
+  })
+  const deletePresetMutation = trpc.aiSettings.deletePreset.useMutation({
+    onSuccess: () => utils.aiSettings.listPresets.invalidate(),
+  })
+  const loadPresetMutation = trpc.aiSettings.loadPreset.useMutation({
+    onSuccess: () => utils.aiSettings.get.invalidate(),
+  })
+
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [presetName, setPresetName] = useState('')
+
+  const presets = allPresets?.filter((p) => p.type === type) ?? []
+
+  const handleSave = useCallback(() => {
+    if (!presetName.trim()) return
+    createPresetMutation.mutate({
+      name: presetName.trim(),
+      type,
+      apiBaseUrl: currentApiBase || undefined,
+      apiKey: currentApiKey || undefined,
+      model: currentModel || undefined,
+    })
+    setPresetName('')
+    setShowSaveDialog(false)
+  }, [presetName, type, currentApiBase, currentApiKey, currentModel, createPresetMutation])
+
+  const handleLoad = useCallback((presetId: number) => {
+    const preset = presets.find((p) => p.id === presetId)
+    if (!preset) return
+    loadPresetMutation.mutate({ id: presetId })
+    onLoadPreset(preset)
+  }, [presets, loadPresetMutation, onLoadPreset])
+
+  return (
+    <motion.div variants={cardItem}>
+      <Card
+        className="overflow-hidden rounded-2xl border-0 shadow-none"
+        style={{ backgroundColor: 'var(--bg-surface)' }}
+      >
+        <CardHeader className="px-4 pt-4 pb-0">
+          <CardTitle
+            className="text-base font-medium"
+            style={{
+              fontFamily: "'DM Sans', sans-serif",
+              color: 'var(--text-primary)',
+            }}
+          >
+            配置预设
+          </CardTitle>
+          <CardDescription style={{ color: 'var(--text-tertiary)' }} className="text-xs">
+            保存和切换不同供应商的 API 配置
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 p-4">
+          {/* Save current as preset */}
+          {showSaveDialog ? (
+            <div className="flex gap-2">
+              <Input
+                placeholder="预设名称（如：OpenAI、DeepSeek）"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                className="rounded-lg border-0 text-sm flex-1"
+                style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSave()
+                  if (e.key === 'Escape') setShowSaveDialog(false)
+                }}
+                autoFocus
+              />
+              <Button
+                size="sm"
+                className="rounded-lg"
+                style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                onClick={handleSave}
+                disabled={!presetName.trim() || createPresetMutation.isPending}
+              >
+                {createPresetMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-lg"
+                onClick={() => setShowSaveDialog(false)}
+              >
+                <X size={14} />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              className="w-full gap-2 rounded-lg border-0"
+              style={{
+                backgroundColor: 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
+              }}
+              onClick={() => setShowSaveDialog(true)}
+              disabled={!currentApiBase && !currentApiKey && !currentModel}
+            >
+              <Save size={16} />
+              保存当前配置为预设
+            </Button>
+          )}
+
+          {/* Preset list */}
+          {presets.length > 0 && (
+            <div className="flex flex-col gap-1.5 mt-1">
+              {presets.map((preset) => (
+                <div
+                  key={preset.id}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                  style={{ backgroundColor: 'var(--bg-elevated)' }}
+                >
+                  <FolderOpen size={14} style={{ color: 'var(--text-tertiary)' }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                      {preset.name}
+                    </p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>
+                      {preset.model || '未设置模型'} · {(() => { try { return preset.apiBaseUrl ? new URL(preset.apiBaseUrl).hostname : '未设置 URL' } catch { return preset.apiBaseUrl || '未设置 URL' } })()}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs rounded-md"
+                    style={{ color: 'var(--accent)' }}
+                    onClick={() => handleLoad(preset.id)}
+                    disabled={loadPresetMutation.isPending}
+                  >
+                    加载
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 rounded-md"
+                    style={{ color: 'var(--text-tertiary)' }}
+                    onClick={() => deletePresetMutation.mutate({ id: preset.id })}
+                    disabled={deletePresetMutation.isPending}
+                  >
+                    <X size={14} />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
 
 /* ═══════════════════════════════════════════
    Settings Page
@@ -397,6 +573,7 @@ function ImageModelTab() {
   const [prompt, setPrompt] = useState(DEFAULT_VISION_PROMPT)
   const [showKey, setShowKey] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
+  const [testMessage, setTestMessage] = useState('')
 
   // Sync from server
   useEffect(() => {
@@ -423,7 +600,6 @@ function ImageModelTab() {
       visionModel: modelName || undefined,
       visionPromptTemplate: prompt || undefined,
     }
-    // Only send API key if user has entered something (not placeholder)
     if (apiKey.trim()) {
       payload.visionApiKey = apiKey.trim()
     }
@@ -434,17 +610,21 @@ function ImageModelTab() {
     const keyToTest = apiKey.trim()
     if (!keyToTest) return
     setTestStatus('testing')
+    setTestMessage('')
     try {
-      await testVision.mutateAsync({
+      const result = await testVision.mutateAsync({
         apiKey: keyToTest,
         baseUrl: apiBase || undefined,
         model: modelName || undefined,
       })
+      setTestMessage(result.message)
       setTestStatus('success')
-      setTimeout(() => setTestStatus('idle'), 3000)
-    } catch {
+      setTimeout(() => { setTestStatus('idle'); setTestMessage('') }, 5000)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '连接失败'
+      setTestMessage(msg)
       setTestStatus('error')
-      setTimeout(() => setTestStatus('idle'), 3000)
+      setTimeout(() => { setTestStatus('idle'); setTestMessage('') }, 8000)
     }
   }, [apiKey, apiBase, modelName, testVision])
 
@@ -605,10 +785,30 @@ function ImageModelTab() {
                   {testStatus === 'idle' && '测试连接'}
                 </span>
               </Button>
+              {testMessage && (
+                <p
+                  className="mt-2 text-xs px-1"
+                  style={{ color: testStatus === 'error' ? 'var(--error)' : 'var(--success)' }}
+                >
+                  {testMessage}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Presets */}
+      <PresetManager
+        type="vision"
+        currentApiBase={apiBase}
+        currentApiKey={apiKey}
+        currentModel={modelName}
+        onLoadPreset={(preset) => {
+          if (preset.apiBaseUrl) setApiBase(preset.apiBaseUrl)
+          if (preset.model) setModelName(preset.model)
+        }}
+      />
 
       {/* Prompt Template */}
       <motion.div variants={cardItem}>
@@ -697,6 +897,7 @@ function WriterModelTab() {
   const [stylePromptsMap, setStylePromptsMap] = useState<Record<string, string>>(DEFAULT_STYLE_PROMPTS)
   const [showKey, setShowKey] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
+  const [testMessage, setTestMessage] = useState('')
 
   // Sync from server
   useEffect(() => {
@@ -752,17 +953,21 @@ function WriterModelTab() {
     const keyToTest = apiKey.trim()
     if (!keyToTest) return
     setTestStatus('testing')
+    setTestMessage('')
     try {
-      await testDiary.mutateAsync({
+      const result = await testDiary.mutateAsync({
         apiKey: keyToTest,
         baseUrl: apiBase || undefined,
         model: modelName || undefined,
       })
+      setTestMessage(result.message)
       setTestStatus('success')
-      setTimeout(() => setTestStatus('idle'), 3000)
-    } catch {
+      setTimeout(() => { setTestStatus('idle'); setTestMessage('') }, 5000)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '连接失败'
+      setTestMessage(msg)
       setTestStatus('error')
-      setTimeout(() => setTestStatus('idle'), 3000)
+      setTimeout(() => { setTestStatus('idle'); setTestMessage('') }, 8000)
     }
   }, [apiKey, apiBase, modelName, testDiary])
 
@@ -916,10 +1121,30 @@ function WriterModelTab() {
                   {testStatus === 'idle' && '测试连接'}
                 </span>
               </Button>
+              {testMessage && (
+                <p
+                  className="mt-2 text-xs px-1"
+                  style={{ color: testStatus === 'error' ? 'var(--error)' : 'var(--success)' }}
+                >
+                  {testMessage}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Presets */}
+      <PresetManager
+        type="diary"
+        currentApiBase={apiBase}
+        currentApiKey={apiKey}
+        currentModel={modelName}
+        onLoadPreset={(preset) => {
+          if (preset.apiBaseUrl) setApiBase(preset.apiBaseUrl)
+          if (preset.model) setModelName(preset.model)
+        }}
+      />
 
       {/* Diary Language */}
       <motion.div variants={cardItem}>

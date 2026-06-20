@@ -6,6 +6,13 @@ import {
   updateVisionSettings,
   updateDiarySettings,
 } from "../queries/ai-settings";
+import {
+  findPresetsByUserId,
+  createPreset,
+  updatePreset,
+  deletePreset,
+} from "../queries/model-presets";
+import { testModelConnection } from "../lib/openai";
 
 export const aiSettingsRouter = createRouter({
   // ── queries ──────────────────────────────────────────────────────
@@ -107,16 +114,17 @@ export const aiSettingsRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      // TODO: Implement actual vision model connection test
       try {
-        // In a real implementation, this would make a test request to the vision API
-        // e.g., const result = await testVisionConnection(input.apiKey, input.baseUrl, input.model);
-        void input; // Acknowledge input is used for future implementation
-        return { success: true, message: "Vision model connection is valid" };
+        const result = await testModelConnection({
+          apiKey: input.apiKey,
+          baseUrl: input.baseUrl,
+          model: input.model,
+        });
+        return result;
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `Vision model connection failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+          message: error instanceof Error ? error.message : "连接失败: 未知错误",
         });
       }
     }),
@@ -130,16 +138,84 @@ export const aiSettingsRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      // TODO: Implement actual diary model connection test
       try {
-        // In a real implementation, this would make a test request to the diary API
-        void input; // Acknowledge input is used for future implementation
-        return { success: true, message: "Diary model connection is valid" };
+        const result = await testModelConnection({
+          apiKey: input.apiKey,
+          baseUrl: input.baseUrl,
+          model: input.model,
+        });
+        return result;
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `Diary model connection failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+          message: error instanceof Error ? error.message : "连接失败: 未知错误",
         });
       }
+    }),
+
+  // ── presets ────────────────────────────────────────────────────
+
+  listPresets: authedQuery.query(async ({ ctx }) => {
+    return findPresetsByUserId(ctx.user.id);
+  }),
+
+  createPreset: authedQuery
+    .input(
+      z.object({
+        name: z.string().min(1).max(100),
+        type: z.enum(["vision", "diary"]),
+        apiBaseUrl: z.string().max(500).optional(),
+        apiKey: z.string().optional(),
+        model: z.string().max(100).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      return createPreset(ctx.user.id, input);
+    }),
+
+  updatePreset: authedQuery
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: z.string().min(1).max(100).optional(),
+        apiBaseUrl: z.string().max(500).optional(),
+        apiKey: z.string().optional(),
+        model: z.string().max(100).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      return updatePreset(ctx.user.id, id, data);
+    }),
+
+  deletePreset: authedQuery
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      await deletePreset(ctx.user.id, input.id);
+      return { success: true };
+    }),
+
+  loadPreset: authedQuery
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const presets = await findPresetsByUserId(ctx.user.id);
+      const preset = presets.find((p) => p.id === input.id);
+      if (!preset) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Preset not found" });
+      }
+      if (preset.type === "vision") {
+        const settings = await updateVisionSettings(ctx.user.id, {
+          visionApiBaseUrl: preset.apiBaseUrl ?? undefined,
+          visionApiKey: preset.apiKey ?? undefined,
+          visionModel: preset.model ?? undefined,
+        });
+        return { ...settings, visionApiKey: undefined, diaryApiKey: undefined };
+      }
+      const settings = await updateDiarySettings(ctx.user.id, {
+        diaryApiBaseUrl: preset.apiBaseUrl ?? undefined,
+        diaryApiKey: preset.apiKey ?? undefined,
+        diaryModel: preset.model ?? undefined,
+      });
+      return { ...settings, visionApiKey: undefined, diaryApiKey: undefined };
     }),
 });
