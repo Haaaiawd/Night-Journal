@@ -10,6 +10,9 @@ import {
   Moon,
   Zap,
   Wind,
+  Loader2,
+  Check,
+  AlertTriangle,
 } from 'lucide-react'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
@@ -20,11 +23,19 @@ import { format } from 'date-fns'
 // Types
 // ──────────────────────────────────────────────────────────
 
+interface AttachmentMeta {
+  fileUrl: string
+  visionStatus: string
+  visionSummary?: string
+  visionModelUsed?: string
+}
+
 interface Fragment {
   id: string
   type: 'text' | 'image' | 'mixed'
   content?: string
   images?: string[]
+  attachmentMetas?: AttachmentMeta[]
   mood?: MoodKey
   timestamp: string
 }
@@ -125,6 +136,90 @@ function MoodTag({ moodKey }: { moodKey: MoodKey }) {
 }
 
 // ──────────────────────────────────────────────────────────
+// Vision Status Badge
+// ──────────────────────────────────────────────────────────
+
+function VisionBadge({ meta }: { meta: AttachmentMeta }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (meta.visionStatus === 'completed' && meta.visionSummary) {
+    return (
+      <>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full transition-colors"
+          style={{
+            backgroundColor: 'rgba(34, 197, 94, 0.85)',
+            backdropFilter: 'blur(4px)',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+          }}
+          title="图片已分析 — 点击查看结果"
+        >
+          <Check size={12} strokeWidth={3} color="#fff" />
+        </button>
+        {expanded && (
+          <div
+            className="absolute bottom-0 left-0 right-0 z-10 max-h-[40%] overflow-y-auto rounded-b-xl px-3 py-2"
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.72)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <button
+              onClick={() => setExpanded(false)}
+              className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white/80"
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <p className="text-xs leading-relaxed text-white/90 pr-4">
+              {meta.visionSummary}
+            </p>
+            {meta.visionModelUsed && (
+              <p className="mt-1 text-[10px] text-white/40">
+                via {meta.visionModelUsed}
+              </p>
+            )}
+          </div>
+        )}
+      </>
+    )
+  }
+
+  if (meta.visionStatus === 'failed') {
+    return (
+      <div
+        className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+        style={{
+          backgroundColor: 'rgba(239, 68, 68, 0.85)',
+          backdropFilter: 'blur(4px)',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+        }}
+        title="图片分析失败"
+      >
+        <AlertTriangle size={12} strokeWidth={2.5} color="#fff" />
+      </div>
+    )
+  }
+
+  // pending — spinning loader
+  return (
+    <div
+      className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+      style={{
+        backgroundColor: 'rgba(255,255,255,0.85)',
+        backdropFilter: 'blur(4px)',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+      }}
+      title="图片分析中…"
+    >
+      <Loader2 size={13} strokeWidth={2.5} className="animate-spin" style={{ color: 'var(--text-secondary)' }} />
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────
 // Fragment Card Component
 // ──────────────────────────────────────────────────────────
 
@@ -173,13 +268,14 @@ function FragmentCard({ fragment, index }: { fragment: Fragment; index: number }
               initial={{ scale: 1.02 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.2 }}
-              className={`overflow-hidden rounded-xl ${fragment.images!.length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}
+              className={`group relative overflow-hidden rounded-xl ${fragment.images!.length === 1 ? 'aspect-[4/3]' : 'aspect-square'}`}
             >
               <img
                 src={img}
                 alt={`图片 ${i + 1}`}
                 className="h-full w-full object-cover"
               />
+                {fragment.attachmentMetas?.[i] && <VisionBadge meta={fragment.attachmentMetas[i]} />}
             </motion.div>
           ))}
         </div>
@@ -652,14 +748,27 @@ export default function Home() {
 
   // Convert server entries to the local Fragment type for rendering
   const serverFragments: Fragment[] = serverEntries.map((entry) => {
-    const attachmentUrls = (entry as { attachments?: Array<{ fileUrl: string }> }).attachments
+    const attachments = (entry as { attachments?: Array<{
+      fileUrl: string
+      visionStatus: string
+      visionSummary?: string
+      visionModelUsed?: string
+    }> }).attachments
+    const attachmentUrls = attachments
       ?.map((a) => a.fileUrl)
       .filter(Boolean)
+    const attachmentMetas = attachments?.map((a) => ({
+      fileUrl: a.fileUrl,
+      visionStatus: a.visionStatus,
+      visionSummary: a.visionSummary,
+      visionModelUsed: a.visionModelUsed,
+    }))
     return {
       id: String(entry.id),
       type: entry.hasImages ? (entry.contentText ? 'mixed' : 'image') : 'text',
       content: entry.contentText || undefined,
       images: attachmentUrls && attachmentUrls.length > 0 ? attachmentUrls : undefined,
+      attachmentMetas: attachmentMetas && attachmentMetas.length > 0 ? attachmentMetas : undefined,
       mood: (entry.moodLabel as MoodKey) || undefined,
       timestamp: formatTime(entry.createdAt),
     }
