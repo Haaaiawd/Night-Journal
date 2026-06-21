@@ -13,7 +13,10 @@ import {
   Loader2,
   Check,
   AlertTriangle,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
@@ -231,7 +234,19 @@ function VisionBadge({ meta }: { meta: AttachmentMeta }) {
 // Fragment Card Component
 // ──────────────────────────────────────────────────────────
 
-function FragmentCard({ fragment, index }: { fragment: Fragment; index: number }) {
+function FragmentCard({
+  fragment,
+  index,
+  canEdit,
+  onEdit,
+  onDelete,
+}: {
+  fragment: Fragment
+  index: number
+  canEdit?: boolean
+  onEdit?: (fragment: Fragment) => void
+  onDelete?: (fragment: Fragment) => void
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -244,15 +259,37 @@ function FragmentCard({ fragment, index }: { fragment: Fragment; index: number }
         border: '1px solid var(--divider)',
       }}
     >
-      {/* Top row: mood + timestamp */}
+      {/* Top row: mood + timestamp + actions */}
       <div className="mb-3 flex items-center justify-between">
         <div>{fragment.mood && <MoodTag moodKey={fragment.mood} />}</div>
-        <span
-          className="text-xs font-ui"
-          style={{ color: 'var(--text-tertiary)' }}
-        >
-          {fragment.timestamp}
-        </span>
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onEdit?.(fragment)}
+                className="flex h-7 w-7 items-center justify-center rounded-full"
+                style={{ color: 'var(--text-tertiary)' }}
+                aria-label="编辑"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={() => onDelete?.(fragment)}
+                className="flex h-7 w-7 items-center justify-center rounded-full"
+                style={{ color: 'var(--text-tertiary)' }}
+                aria-label="删除"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
+          <span
+            className="text-xs font-ui"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            {fragment.timestamp}
+          </span>
+        </div>
       </div>
 
       {/* Content */}
@@ -300,20 +337,29 @@ function BottomDrawer({
   open,
   onClose,
   onSubmit,
+  mode = 'create',
+  initialData,
 }: {
   open: boolean
   onClose: () => void
   onSubmit: (fragment: Omit<Fragment, 'id' | 'timestamp'>, attachments?: UploadedAttachment[]) => void
+  mode?: 'create' | 'edit'
+  initialData?: {
+    content: string
+    mood: MoodKey
+    images?: string[]
+  }
 }) {
-  const [selectedMood, setSelectedMood] = useState<MoodKey | null>(null)
-  const [textValue, setTextValue] = useState('')
-  const [images, setImages] = useState<string[]>([])
+  const [selectedMood, setSelectedMood] = useState<MoodKey | null>(initialData?.mood ?? null)
+  const [textValue, setTextValue] = useState(initialData?.content ?? '')
+  const [images, setImages] = useState<string[]>(initialData?.images ?? [])
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const keyboardHeight = useKeyboardHeight()
+  const isEdit = mode === 'edit'
 
   // Lock body scroll when drawer is open.
   // We avoid position:fixed on the body because it causes layout jumps on
@@ -366,9 +412,9 @@ function BottomDrawer({
 
     setIsSubmitting(true)
 
-    // Upload image files to the server
+    // Upload image files to the server only when creating a new entry
     let uploadedAttachments: UploadedAttachment[] | undefined
-    if (imageFiles.length > 0) {
+    if (!isEdit && imageFiles.length > 0) {
       uploadedAttachments = []
       for (const file of imageFiles) {
         try {
@@ -394,9 +440,9 @@ function BottomDrawer({
     }
 
     await onSubmit({
-      type: imageFiles.length > 0 ? 'mixed' : 'text',
+      type: isEdit ? (images.length > 0 ? 'mixed' : 'text') : (imageFiles.length > 0 ? 'mixed' : 'text'),
       content: textValue.trim(),
-      images: uploadedAttachments?.map((a) => a.fileUrl),
+      images: isEdit ? images : uploadedAttachments?.map((a) => a.fileUrl),
       mood: selectedMood,
     }, uploadedAttachments)
 
@@ -404,7 +450,7 @@ function BottomDrawer({
     setShowSuccess(true)
     await new Promise((r) => setTimeout(r, 400))
     handleClose()
-  }, [selectedMood, textValue, imageFiles, onSubmit, handleClose])
+  }, [selectedMood, textValue, imageFiles, images, isEdit, onSubmit, handleClose])
 
   const canSubmit = selectedMood !== null && textValue.trim().length > 0
 
@@ -487,7 +533,7 @@ function BottomDrawer({
                 className="font-display text-lg"
                 style={{ color: 'var(--text-primary)' }}
               >
-                记录此刻
+                {isEdit ? '编辑记录' : '记录此刻'}
               </h2>
               <button
                 onClick={handleClose}
@@ -591,80 +637,84 @@ function BottomDrawer({
                 </p>
               )}
 
-              {/* ── Step 3: Images (optional) ── */}
-              <div className="mb-2 mt-5 flex items-center gap-2">
-                <span
-                  className="text-xs font-medium"
-                  style={{ color: 'var(--text-tertiary)' }}
-                >
-                  图片
-                </span>
-                <span
-                  className="text-xs"
-                  style={{ color: 'var(--text-tertiary)' }}
-                >
-                  ·可选
-                </span>
-              </div>
-              {images.length === 0 ? (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-colors duration-200"
-                  style={{ borderColor: 'var(--divider)' }}
-                >
-                  <ImagePlus size={36} style={{ color: 'var(--text-tertiary)' }} />
-                  <p
-                    className="mt-2 text-sm font-ui"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    点击上传图片
-                  </p>
-                  <p
-                    className="mt-0.5 text-xs font-ui"
-                    style={{ color: 'var(--text-tertiary)' }}
-                  >
-                    支持 JPG, PNG, HEIC
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {images.map((img, i) => (
-                    <div
-                      key={i}
-                      className="relative aspect-square overflow-hidden rounded-xl"
+              {/* ── Step 3: Images (optional) — only when creating ── */}
+              {!isEdit && (
+                <>
+                  <div className="mb-2 mt-5 flex items-center gap-2">
+                    <span
+                      className="text-xs font-medium"
+                      style={{ color: 'var(--text-tertiary)' }}
                     >
-                      <img
-                        src={img}
-                        alt={`预览 ${i + 1}`}
-                        className="h-full w-full object-cover"
-                      />
-                      <button
-                        onClick={() => removeImage(i)}
-                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-                  {images.length < 9 && (
-                    <button
+                      图片
+                    </span>
+                    <span
+                      className="text-xs"
+                      style={{ color: 'var(--text-tertiary)' }}
+                    >
+                      ·可选
+                    </span>
+                  </div>
+                  {images.length === 0 ? (
+                    <div
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex aspect-square items-center justify-center rounded-xl border-2 border-dashed"
+                      className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-colors duration-200"
                       style={{ borderColor: 'var(--divider)' }}
                     >
-                      <Plus size={24} style={{ color: 'var(--text-tertiary)' }} />
-                    </button>
+                      <ImagePlus size={36} style={{ color: 'var(--text-tertiary)' }} />
+                      <p
+                        className="mt-2 text-sm font-ui"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        点击上传图片
+                      </p>
+                      <p
+                        className="mt-0.5 text-xs font-ui"
+                        style={{ color: 'var(--text-tertiary)' }}
+                      >
+                        支持 JPG, PNG, HEIC
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {images.map((img, i) => (
+                        <div
+                          key={i}
+                          className="relative aspect-square overflow-hidden rounded-xl"
+                        >
+                          <img
+                            src={img}
+                            alt={`预览 ${i + 1}`}
+                            className="h-full w-full object-cover"
+                          />
+                          <button
+                            onClick={() => removeImage(i)}
+                            className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      {images.length < 9 && (
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex aspect-square items-center justify-center rounded-xl border-2 border-dashed"
+                          style={{ borderColor: 'var(--divider)' }}
+                        >
+                          <Plus size={24} style={{ color: 'var(--text-tertiary)' }} />
+                        </button>
+                      )}
+                    </div>
                   )}
-                </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
+                </>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleFileSelect}
-              />
             </div>
 
             {/* Submit button */}
@@ -749,12 +799,39 @@ export default function Home() {
   const createEntry = trpc.entries.create.useMutation({
     onSuccess: () => {
       utils.entries.list.invalidate({ date: activeDate })
+      toast.success('记录已保存')
     },
     onError: () => {
-      // Toast is handled by the drawer's submit handler; just log here
       console.error('[Home] Failed to create entry')
+      toast.error('保存失败，请重试')
     },
   })
+
+  // Mutation to update an existing entry
+  const updateEntry = trpc.entries.update.useMutation({
+    onSuccess: () => {
+      utils.entries.list.invalidate({ date: activeDate })
+      toast.success('已更新')
+    },
+    onError: () => {
+      console.error('[Home] Failed to update entry')
+      toast.error('更新失败，请重试')
+    },
+  })
+
+  // Mutation to soft-delete an entry
+  const deleteEntry = trpc.entries.delete.useMutation({
+    onSuccess: () => {
+      utils.entries.list.invalidate({ date: activeDate })
+      toast.success('已删除')
+    },
+    onError: () => {
+      console.error('[Home] Failed to delete entry')
+      toast.error('删除失败，请重试')
+    },
+  })
+
+  const isToday = activeDate === getTodayDateString()
 
   // Convert server entries to the local Fragment type for rendering
   const serverFragments: Fragment[] = serverEntries.map((entry) => {
@@ -785,6 +862,7 @@ export default function Home() {
   })
 
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [editingFragment, setEditingFragment] = useState<Fragment | null>(null)
   const [promptIndex, setPromptIndex] = useState(0)
   const dateInfo = useMemo(() => getFormattedDate(activeDateObj), [activeDateObj])
   const [headerStyle, setHeaderStyle] = useState({ opacity: 1, y: 0 })
@@ -810,18 +888,45 @@ export default function Home() {
     }
   }, [])
 
-  const handleAddFragment = useCallback(
+  const handleDrawerSubmit = useCallback(
     async (data: Omit<Fragment, 'id' | 'timestamp'>, attachments?: UploadedAttachment[]) => {
       if (!isAuthenticated) return
 
-      await createEntry.mutateAsync({
-        contentText: data.content!.trim(),
-        moodLabel: data.mood!,
-        entryDate: activeDate,
-        attachments: attachments && attachments.length > 0 ? attachments : undefined,
-      })
+      if (editingFragment) {
+        await updateEntry.mutateAsync({
+          id: Number(editingFragment.id),
+          contentText: data.content!.trim(),
+          moodLabel: data.mood!,
+          entryDate: activeDate,
+        })
+      } else {
+        await createEntry.mutateAsync({
+          contentText: data.content!.trim(),
+          moodLabel: data.mood!,
+          entryDate: activeDate,
+          attachments: attachments && attachments.length > 0 ? attachments : undefined,
+        })
+      }
     },
-    [isAuthenticated, createEntry, activeDate],
+    [isAuthenticated, editingFragment, updateEntry, createEntry, activeDate],
+  )
+
+  const handleOpenCreate = useCallback(() => {
+    setEditingFragment(null)
+    setDrawerOpen(true)
+  }, [setEditingFragment, setDrawerOpen])
+
+  const handleOpenEdit = useCallback((fragment: Fragment) => {
+    setEditingFragment(fragment)
+    setDrawerOpen(true)
+  }, [setEditingFragment, setDrawerOpen])
+
+  const handleDelete = useCallback(
+    (fragment: Fragment) => {
+      if (!window.confirm('确定删除这条记录吗？')) return
+      deleteEntry.mutate({ id: Number(fragment.id) })
+    },
+    [deleteEntry],
   )
 
   const fragments = serverFragments
@@ -900,7 +1005,14 @@ export default function Home() {
           <div className="flex flex-col gap-3">
             <AnimatePresence>
               {fragments.map((fragment, index) => (
-                <FragmentCard key={fragment.id} fragment={fragment} index={index} />
+                <FragmentCard
+                  key={fragment.id}
+                  fragment={fragment}
+                  index={index}
+                  canEdit={isToday}
+                  onEdit={handleOpenEdit}
+                  onDelete={handleDelete}
+                />
               ))}
             </AnimatePresence>
           </div>
@@ -918,7 +1030,7 @@ export default function Home() {
           delay: 0.4,
         }}
         whileTap={{ scale: 0.88, x: '-50%' }}
-        onClick={() => setDrawerOpen(true)}
+        onClick={handleOpenCreate}
         className="fixed left-1/2 z-fab flex h-14 w-14 items-center justify-center rounded-full text-white shadow-fab"
         style={{
           bottom: '88px',
@@ -941,9 +1053,23 @@ export default function Home() {
 
       {/* ── Bottom Drawer ── */}
       <BottomDrawer
+        key={editingFragment ? `edit-${editingFragment.id}` : 'create'}
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onSubmit={handleAddFragment}
+        onClose={() => {
+          setDrawerOpen(false)
+          setTimeout(() => setEditingFragment(null), 300)
+        }}
+        onSubmit={handleDrawerSubmit}
+        mode={editingFragment ? 'edit' : 'create'}
+        initialData={
+          editingFragment
+            ? {
+                content: editingFragment.content ?? '',
+                mood: editingFragment.mood ?? 'calm',
+                images: editingFragment.images,
+              }
+            : undefined
+        }
       />
     </div>
   )
