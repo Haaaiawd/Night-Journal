@@ -142,27 +142,27 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
     return;
   }
 
-  const entries = await findEntriesByDate(userId, date);
-  if (entries.length === 0) {
-    throw new Error("No entries for this date");
-  }
-
-  const style = settings.diaryStyle ?? "温柔真实";
-  const length = settings.diaryLength ?? "中";
-  const language = settings.diaryLanguage ?? "zh";
-  const stylePrompt = getStylePrompt(style, settings.stylePrompts);
-  const promptTemplate = settings.diaryPromptTemplate || DEFAULT_DIARY_PROMPT;
-
-  const userMessage = buildDiaryUserMessage({
-    date,
-    language,
-    style,
-    length,
-    stylePrompt,
-    fragments: entries,
-  });
-
   try {
+    const entries = await findEntriesByDate(userId, date);
+    if (entries.length === 0) {
+      throw new Error("No entries for this date");
+    }
+
+    const style = settings.diaryStyle ?? "温柔真实";
+    const length = settings.diaryLength ?? "中";
+    const language = settings.diaryLanguage ?? "zh";
+    const stylePrompt = getStylePrompt(style, settings.stylePrompts);
+    const promptTemplate = settings.diaryPromptTemplate || DEFAULT_DIARY_PROMPT;
+
+    const userMessage = buildDiaryUserMessage({
+      date,
+      language,
+      style,
+      length,
+      stylePrompt,
+      fragments: entries,
+    });
+
     const content = await callChatModel({
       apiKey: settings.diaryApiKey,
       baseUrl: settings.diaryApiBaseUrl,
@@ -192,22 +192,22 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
       generatedAt: new Date(),
       manuallyEdited: false,
     });
+
+    // Mark entries as included (non-critical)
+    try {
+      for (const entry of entries) {
+        if (!entry.includedInDiary) {
+          await updateEntry(userId, entry.id, { includedInDiary: true });
+        }
+      }
+    } catch (err) {
+      console.error("[diary] Failed to mark entries as included:", err);
+    }
   } catch (err) {
     console.error(`[diary] Generation failed for user ${userId} date ${date}:`, err);
     if (diary.generationStatus === "pending") {
       await updateDiary(userId, diary.id, { generationStatus: "failed" });
     }
     throw err;
-  }
-
-  // Mark entries as included (non-critical)
-  try {
-    for (const entry of entries) {
-      if (!entry.includedInDiary) {
-        await updateEntry(userId, entry.id, { includedInDiary: true });
-      }
-    }
-  } catch (err) {
-    console.error("[diary] Failed to mark entries as included:", err);
   }
 }

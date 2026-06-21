@@ -58,7 +58,7 @@ async function shouldAutoGenerate(userId: number, date: string): Promise<boolean
 
 async function processUser(user: { id: number }) {
   const settings = await findAiSettingsByUserId(user.id);
-  if (!settings || !settings.diaryGenerationTime) return;
+  if (!settings || !settings.diaryGenerationTime || !settings.diaryApiKey || !settings.diaryApiBaseUrl) return;
 
   const timezone = settings.timezone || "Asia/Shanghai";
   const { time, yesterday } = getLocalDateTimeParts(timezone);

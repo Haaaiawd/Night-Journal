@@ -135,7 +135,8 @@ Night-Journal/
 │   │   └── password.ts     # POST /api/auth/register + /api/auth/login（bcrypt）
 │   ├── lib/
 │   │   ├── env.ts          # 环境变量：APP_SECRET/DATABASE_URL 必填，Kimi 变量可选
-│   │   └── cookies.ts      # session cookie 配置
+│   │   ├── cookies.ts      # session cookie 配置
+│   │   └── scheduler.ts    # 定时自动生成日记调度器
 │   ├── kimi/
 │   │   ├── auth.ts         # OAuth CSRF-safe initiate + callback handler（懒加载 JWKS）
 │   │   └── session.ts      # JWT sign/verify（两套登录方式共用）
@@ -144,6 +145,8 @@ Night-Journal/
 │   │   ├── diaries/
 │   │   ├── ai-settings/
 │   │   └── users.ts        # 含 findUserByUsername / createLocalUser
+│   ├── services/
+│   │   └── diary.ts        # AI 日记生成：prompt 构建、LLM 调用、响应解析
 │   └── routers/            # tRPC 路由
 │       ├── entries.ts
 │       ├── diaries.ts      # 含 delete mutation
@@ -222,7 +225,7 @@ POST /api/auth/login  { username, password }
 ## 关键 TODO（功能未完成）
 
 1. **文件上传 OSS** — `api/routers/upload.ts` 返回 mock URL，需接入 Aliyun OSS / AWS S3 / MinIO
-2. **AI 日记生成** — `diaries.generate` 和 `diaries.regenerate` 是 stub，需接入 LLM API
+2. ~~**AI 日记生成**~~ — 已实现（`api/services/diary.ts` + `api/lib/scheduler.ts`），支持手动触发和定时自动生成
 3. **API key 加密存储** — 当前明文存入 MySQL，建议生产环境用 AES-256-GCM + env 密钥加密
 4. **图片碎片持久化** — Home 页图片上传路径未打通，依赖 TODO 1
 
