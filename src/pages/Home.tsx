@@ -15,13 +15,16 @@ import {
   AlertTriangle,
   Pencil,
   Trash2,
+  ChevronDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 import { useSearchParams } from 'react-router'
+import { Calendar } from '@/components/ui/calendar'
 import { format, parseISO } from 'date-fns'
+import { zhCN } from 'date-fns/locale'
 
 // ──────────────────────────────────────────────────────────
 // Types
@@ -770,6 +773,90 @@ function BottomDrawer({
 }
 
 // ──────────────────────────────────────────────────────────
+// Date Picker Drawer
+// ──────────────────────────────────────────────────────────
+
+function DatePickerDrawer({
+  open,
+  onClose,
+  selectedDate,
+  onSelect,
+}: {
+  open: boolean
+  onClose: () => void
+  selectedDate: string
+  onSelect: (date: string) => void
+}) {
+  const [month, setMonth] = useState<Date>(parseISO(selectedDate))
+
+  const handleSelect = useCallback(
+    (date: Date | undefined) => {
+      if (!date) return
+      onSelect(format(date, 'yyyy-MM-dd'))
+      onClose()
+    },
+    [onSelect, onClose],
+  )
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-overlay"
+            style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={DRAWER_SPRING}
+            className="fixed left-0 right-0 z-drawer mx-auto flex max-w-[480px] flex-col"
+            style={{
+              bottom: 0,
+              maxHeight: '70vh',
+              backgroundColor: 'var(--bg-elevated)',
+              borderRadius: '24px 24px 0 0',
+            }}
+          >
+            <div className="flex justify-center pt-3 pb-2">
+              <div
+                className="h-1 w-10 rounded-full"
+                style={{ backgroundColor: 'var(--divider)' }}
+              />
+            </div>
+            <div className="px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+              <Calendar
+                mode="single"
+                selected={parseISO(selectedDate)}
+                onSelect={handleSelect}
+                month={month}
+                onMonthChange={setMonth}
+                locale={zhCN}
+                weekStartsOn={1}
+                captionLayout="dropdown"
+                startMonth={new Date(2020, 0)}
+                endMonth={new Date()}
+                labels={{
+                  labelPrevious: () => '上个月',
+                  labelNext: () => '下个月',
+                }}
+                className="w-full"
+              />
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
+// ──────────────────────────────────────────────────────────
 // Helper: get today's date string (YYYY-MM-DD)
 // ──────────────────────────────────────────────────────────
 
@@ -784,7 +871,7 @@ function getTodayDateString(): string {
 export default function Home() {
   const { isAuthenticated } = useAuth()
   const utils = trpc.useUtils()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const activeDate = useMemo(() => getActiveDate(searchParams), [searchParams])
   const activeDateObj = useMemo(() => parseISO(activeDate), [activeDate])
@@ -863,6 +950,7 @@ export default function Home() {
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingFragment, setEditingFragment] = useState<Fragment | null>(null)
+  const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [promptIndex, setPromptIndex] = useState(0)
   const dateInfo = useMemo(() => getFormattedDate(activeDateObj), [activeDateObj])
   const [headerStyle, setHeaderStyle] = useState({ opacity: 1, y: 0 })
@@ -949,18 +1037,27 @@ export default function Home() {
           background: `linear-gradient(to bottom, var(--bg-primary) 0%, var(--bg-primary) 85%, transparent 100%)`,
         }}
       >
-        <p
-          className="text-xs font-ui tracking-wide"
-          style={{ color: 'var(--text-tertiary)' }}
+        <button
+          onClick={() => setDatePickerOpen(true)}
+          className="flex w-full items-center justify-between text-left"
+          aria-label="选择日期"
         >
-          {dateInfo.yearMonth}
-        </p>
-        <h1
-          className="mt-0.5 font-ui text-[15px] font-medium tracking-wide"
-          style={{ color: 'var(--text-primary)' }}
-        >
-          {dateInfo.dayWeek}
-        </h1>
+          <div>
+            <p
+              className="text-xs font-ui tracking-wide"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              {dateInfo.yearMonth}
+            </p>
+            <h1
+              className="mt-0.5 font-ui text-[15px] font-medium tracking-wide"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {dateInfo.dayWeek}
+            </h1>
+          </div>
+          <ChevronDown size={16} style={{ color: 'var(--text-tertiary)' }} />
+        </button>
         <div className="mt-1 h-5 overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.p
@@ -1070,6 +1167,14 @@ export default function Home() {
               }
             : undefined
         }
+      />
+
+      {/* ── Date Picker Drawer ── */}
+      <DatePickerDrawer
+        open={datePickerOpen}
+        onClose={() => setDatePickerOpen(false)}
+        selectedDate={activeDate}
+        onSelect={(date) => setSearchParams({ date })}
       />
     </div>
   )
