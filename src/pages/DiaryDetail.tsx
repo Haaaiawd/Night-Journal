@@ -17,7 +17,6 @@ import { format, parseISO } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Drawer } from "vaul";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -921,8 +920,6 @@ export default function DiaryDetail() {
         isDeleting={deleteMutation.isPending}
       />
 
-      {/* Toast notifications */}
-      <Toaster position="top-center" />
     </div>
   );
 }
