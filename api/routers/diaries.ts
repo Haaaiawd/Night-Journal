@@ -87,6 +87,12 @@ export const diariesRouter = createRouter({
       // Check if diary already exists for this date
       const existing = await findDiaryByDate(ctx.user.id, input.date);
       if (existing) {
+        if (existing.generationStatus === "pending") {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Diary generation is already in progress for this date.",
+          });
+        }
         throw new TRPCError({
           code: "CONFLICT",
           message: "Diary already exists for this date. Use regenerate instead.",
@@ -152,6 +158,13 @@ export const diariesRouter = createRouter({
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Diary not found for this date",
+        });
+      }
+
+      if (diary.generationStatus === "pending") {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Diary generation is already in progress for this date.",
         });
       }
 
