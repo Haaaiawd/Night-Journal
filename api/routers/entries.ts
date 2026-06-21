@@ -67,7 +67,7 @@ export const entriesRouter = createRouter({
         }
 
         // Trigger async vision analysis (fire-and-forget)
-        triggerVisionAnalysis(ctx.user.id, entry.id, attachments, input.contentText).catch(
+        triggerVisionAnalysis(ctx.user.id, entry.id, input.contentText).catch(
           (err) => console.error("[vision] Analysis failed:", err),
         );
       }
@@ -112,7 +112,6 @@ import { updateAttachmentVision, findAttachmentsByEntryId } from "../queries/ent
 async function triggerVisionAnalysis(
   userId: number,
   entryId: number,
-  attachments: Array<{ storagePath: string; fileType: string }>,
   contextText: string,
 ) {
   const settings = await findAiSettingsByUserId(userId);

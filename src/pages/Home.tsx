@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -17,7 +17,8 @@ import {
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
-import { format } from 'date-fns'
+import { useSearchParams } from 'react-router'
+import { format, parseISO } from 'date-fns'
 
 // ──────────────────────────────────────────────────────────
 // Types
@@ -76,16 +77,23 @@ const SOFT_EASE = [0.25, 0.1, 0.25, 1] as [number, number, number, number]
 // Helper: format date
 // ──────────────────────────────────────────────────────────
 
-function getFormattedDate(): { yearMonth: string; dayWeek: string } {
-  const now = new Date()
-  const month = now.getMonth() + 1
-  const date = now.getDate()
+function getFormattedDate(date: Date): { yearMonth: string; dayWeek: string } {
+  const month = date.getMonth() + 1
+  const dateNum = date.getDate()
   const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-  const week = weekdays[now.getDay()]
+  const week = weekdays[date.getDay()]
   return {
-    yearMonth: `${now.getFullYear()}年${month}月`,
-    dayWeek: `${month}月${date}日 ${week}`,
+    yearMonth: `${date.getFullYear()}年${month}月`,
+    dayWeek: `${month}月${dateNum}日 ${week}`,
   }
+}
+
+function getActiveDate(searchParams: URLSearchParams): string {
+  const dateParam = searchParams.get('date')
+  if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+    return dateParam
+  }
+  return getTodayDateString()
 }
 
 function formatTime(date?: Date | string | null): string {
@@ -726,19 +734,21 @@ function getTodayDateString(): string {
 export default function Home() {
   const { isAuthenticated } = useAuth()
   const utils = trpc.useUtils()
+  const [searchParams] = useSearchParams()
 
-  const todayDate = getTodayDateString()
+  const activeDate = useMemo(() => getActiveDate(searchParams), [searchParams])
+  const activeDateObj = useMemo(() => parseISO(activeDate), [activeDate])
 
-  // Load today's entries from the server
+  // Load entries for the active date from the server
   const { data: serverEntries = [] } = trpc.entries.list.useQuery(
-    { date: todayDate },
+    { date: activeDate },
     { enabled: isAuthenticated, staleTime: 1000 * 30 },
   )
 
   // Mutation to persist a new entry
   const createEntry = trpc.entries.create.useMutation({
     onSuccess: () => {
-      utils.entries.list.invalidate({ date: todayDate })
+      utils.entries.list.invalidate({ date: activeDate })
     },
     onError: () => {
       // Toast is handled by the drawer's submit handler; just log here
@@ -776,7 +786,7 @@ export default function Home() {
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [promptIndex, setPromptIndex] = useState(0)
-  const [dateInfo] = useState(getFormattedDate)
+  const dateInfo = useMemo(() => getFormattedDate(activeDateObj), [activeDateObj])
   const [headerStyle, setHeaderStyle] = useState({ opacity: 1, y: 0 })
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -807,11 +817,11 @@ export default function Home() {
       await createEntry.mutateAsync({
         contentText: data.content!.trim(),
         moodLabel: data.mood!,
-        entryDate: todayDate,
+        entryDate: activeDate,
         attachments: attachments && attachments.length > 0 ? attachments : undefined,
       })
     },
-    [isAuthenticated, createEntry, todayDate],
+    [isAuthenticated, createEntry, activeDate],
   )
 
   const fragments = serverFragments
@@ -879,7 +889,7 @@ export default function Home() {
           >
             <EmptyStateIllustration />
             <p className="mt-4 font-body text-[15px]" style={{ color: 'var(--text-tertiary)' }}>
-              今天还没有记录
+              这一天还没有记录
             </p>
             <p className="mt-1 text-xs font-ui" style={{ color: 'var(--text-tertiary)' }}>
               点击下面的 + 开始吧

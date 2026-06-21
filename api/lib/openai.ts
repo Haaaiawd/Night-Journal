@@ -147,3 +147,58 @@ export async function callVisionModel(opts: {
     clearTimeout(timeout);
   }
 }
+
+/**
+ * Call a generic chat completion model with a system/user message pair.
+ * Used for diary generation.
+ */
+export async function callChatModel(opts: {
+  apiKey: string;
+  baseUrl?: string;
+  model?: string;
+  messages: Array<{ role: "system" | "user"; content: string }>;
+  maxTokens?: number;
+  temperature?: number;
+  timeoutMs?: number;
+}): Promise<string> {
+  const base = normalizeBaseUrl(opts.baseUrl || "https://api.openai.com");
+  const model = opts.model || "gpt-4o-mini";
+  const url = `${base}/chat/completions`;
+
+  const body = {
+    model,
+    messages: opts.messages as ChatMessage[],
+    max_tokens: opts.maxTokens ?? 2048,
+    temperature: opts.temperature ?? 0.7,
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 120_000);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${opts.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Chat API returned ${res.status}: ${text.slice(0, 300)}`);
+    }
+
+    const data = (await res.json()) as ChatCompletionResponse;
+    return data.choices?.[0]?.message?.content ?? "";
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("聊天 API 请求超时");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}

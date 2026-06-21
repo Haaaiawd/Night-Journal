@@ -22,6 +22,10 @@ export async function findUserByUsername(username: string) {
   return rows.at(0);
 }
 
+export async function findAllUsers() {
+  return getDb().select().from(schema.users);
+}
+
 /**
  * Create a local (username + password) user.
  * unionId is auto-generated with a "local:" prefix so it never
