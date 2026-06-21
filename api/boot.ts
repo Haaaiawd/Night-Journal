@@ -9,6 +9,7 @@ import { createOAuthCallbackHandler, createOAuthInitiateHandler, authenticateReq
 import { createRegisterHandler, createLoginHandler } from "./auth/password";
 import { Paths } from "@contracts/constants";
 import { saveUploadedFile, getFilePath } from "./lib/upload";
+import { startScheduler } from "./lib/scheduler";
 import fs from "fs";
 import path from "path";
 
@@ -88,4 +89,8 @@ if (env.isProduction) {
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+}
+
+if (env.isProduction || process.env.ENABLE_AUTO_GENERATION_IN_DEV === "true") {
+  startScheduler();
 }

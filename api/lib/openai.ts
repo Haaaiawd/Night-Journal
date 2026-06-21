@@ -2,6 +2,8 @@
  * OpenAI-compatible API helpers for testing connections and calling vision models.
  */
 
+import { isPrivateHost } from "./url-guard";
+
 interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
@@ -26,6 +28,24 @@ function normalizeBaseUrl(baseUrl: string): string {
   return url;
 }
 
+function validateBaseUrl(baseUrl: string): void {
+  const normalized = normalizeBaseUrl(baseUrl);
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error("Invalid API base URL");
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("API base URL must use http or https");
+  }
+
+  if (isPrivateHost(parsed.hostname)) {
+    throw new Error("API base URL must not point to a private/internal network address");
+  }
+}
+
 /**
  * Test an OpenAI-compatible API connection by making a minimal chat completion request.
  * Returns the model's reply on success, throws on failure.
@@ -35,7 +55,9 @@ export async function testModelConnection(opts: {
   baseUrl?: string;
   model?: string;
 }): Promise<{ success: true; model: string; message: string }> {
-  const base = normalizeBaseUrl(opts.baseUrl || "https://api.openai.com");
+  const rawBase = opts.baseUrl || "https://api.openai.com";
+  validateBaseUrl(rawBase);
+  const base = normalizeBaseUrl(rawBase);
   const model = opts.model || "gpt-4o-mini";
   const url = `${base}/chat/completions`;
 
@@ -101,7 +123,9 @@ export async function callVisionModel(opts: {
   imageBase64: string;
   imageMimeType: string;
 }): Promise<string> {
-  const base = normalizeBaseUrl(opts.baseUrl || "https://api.openai.com");
+  const rawBase = opts.baseUrl || "https://api.openai.com";
+  validateBaseUrl(rawBase);
+  const base = normalizeBaseUrl(rawBase);
   const model = opts.model || "gpt-4o";
   const url = `${base}/chat/completions`;
 
@@ -143,6 +167,63 @@ export async function callVisionModel(opts: {
 
     const data = (await res.json()) as ChatCompletionResponse;
     return data.choices?.[0]?.message?.content ?? "";
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Call a generic chat completion model with a system/user message pair.
+ * Used for diary generation.
+ */
+export async function callChatModel(opts: {
+  apiKey: string;
+  baseUrl?: string;
+  model?: string;
+  messages: Array<{ role: "system" | "user"; content: string }>;
+  maxTokens?: number;
+  temperature?: number;
+  timeoutMs?: number;
+}): Promise<string> {
+  const rawBase = opts.baseUrl || "https://api.openai.com";
+  validateBaseUrl(rawBase);
+  const base = normalizeBaseUrl(rawBase);
+  const model = opts.model || "gpt-4o-mini";
+  const url = `${base}/chat/completions`;
+
+  const body = {
+    model,
+    messages: opts.messages as ChatMessage[],
+    max_tokens: opts.maxTokens ?? 2048,
+    temperature: opts.temperature ?? 0.7,
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 120_000);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${opts.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Chat API returned ${res.status}: ${text.slice(0, 300)}`);
+    }
+
+    const data = (await res.json()) as ChatCompletionResponse;
+    return data.choices?.[0]?.message?.content ?? "";
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("聊天 API 请求超时");
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }

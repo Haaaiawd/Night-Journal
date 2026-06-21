@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import {
@@ -17,7 +17,6 @@ import { format, parseISO } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Drawer } from "vaul";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -61,6 +60,34 @@ function formatTime(dateStr: string | Date | null): string {
   if (!dateStr) return "";
   const d = typeof dateStr === "string" ? parseISO(dateStr) : dateStr;
   return format(d, "HH:mm", { locale: zhCN });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Map entry list response to local Fragment type                    */
+/* ------------------------------------------------------------------ */
+
+function mapEntriesToFragments(
+  entries: Array<{
+    id: number;
+    contentText: string;
+    moodLabel: string | null;
+    createdAt: Date;
+    hasImages: boolean;
+    attachments?: Array<{
+      id: number;
+      fileUrl: string;
+      visionSummary: string | null;
+    }>;
+  }>,
+): Fragment[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    contentText: entry.contentText,
+    moodLabel: entry.moodLabel,
+    createdAt: entry.createdAt,
+    hasImages: entry.hasImages,
+    attachments: entry.attachments,
+  }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -270,6 +297,131 @@ function SourceFragments({ fragments }: { fragments: Fragment[] }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Draft Diary View (fragments exist but diary not generated yet)      */
+/* ------------------------------------------------------------------ */
+
+function DraftDiaryView({
+  date,
+  fragments,
+  onGenerate,
+  isGenerating,
+}: {
+  date: string;
+  fragments: Fragment[];
+  onGenerate: () => void;
+  isGenerating: boolean;
+}) {
+  const navigate = useNavigate();
+  const weekday = formatDiaryWeekday(date);
+  const fullDate = formatDiaryFullDate(date);
+
+  return (
+    <div className="relative min-h-[100dvh]">
+      <motion.header
+        className="fixed top-0 left-0 right-0 z-30 mx-auto flex h-14 max-w-[480px] items-center justify-between px-4"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <motion.button
+          className="flex items-center gap-0.5 font-ui text-sm"
+          style={{ color: "var(--text-secondary)" }}
+          onClick={() => navigate("/diary")}
+          whileTap={{ scale: 0.96 }}
+          aria-label="返回日记列表"
+        >
+          <ChevronLeft size={24} strokeWidth={2} />
+          <span className="hidden sm:inline">返回</span>
+        </motion.button>
+
+        <span
+          className="absolute left-1/2 -translate-x-1/2 font-ui text-[15px] font-medium"
+          style={{ color: "var(--text-primary)" }}
+        >
+          {formatDiaryDate(date)}
+        </span>
+      </motion.header>
+
+      <motion.main
+        className="px-5 pt-[72px] pb-8"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <motion.p
+          className="font-ui text-xs uppercase tracking-[0.08em]"
+          style={{ color: "var(--text-tertiary)" }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1, duration: 0.3 }}
+        >
+          {weekday}
+        </motion.p>
+
+        <motion.h1
+          className="mt-2 font-display text-[22px] leading-[1.3] tracking-[0.02em]"
+          style={{ color: "var(--text-primary)" }}
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4, ease: EASE_PRIMARY }}
+        >
+          {fullDate}
+        </motion.h1>
+
+        <motion.div
+          className="my-6 h-px w-full origin-left"
+          style={{ backgroundColor: "var(--divider)" }}
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ delay: 0.4, duration: 0.4, ease: EASE_PRIMARY }}
+        />
+
+        <motion.p
+          className="font-body text-base"
+          style={{ color: "var(--text-secondary)", lineHeight: 1.75 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, duration: 0.4, ease: EASE_PRIMARY }}
+        >
+          这篇日记还没有生成。点击下方按钮，AI 会根据当天的碎片和图片为你整理。
+        </motion.p>
+
+        <motion.button
+          className="mt-6 inline-flex items-center gap-2 rounded-xl px-6 py-3 font-ui text-sm font-medium text-white"
+          style={{ backgroundColor: "var(--accent)" }}
+          onClick={onGenerate}
+          disabled={isGenerating}
+          whileTap={{ scale: 0.96 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6, duration: 0.4, ease: EASE_PRIMARY }}
+        >
+          {isGenerating ? (
+            <>
+              <motion.span
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+              >
+                <RotateCcw size={18} />
+              </motion.span>
+              生成中...
+            </>
+          ) : (
+            <>
+              <Sparkles size={18} />
+              生成日记
+            </>
+          )}
+        </motion.button>
+      </motion.main>
+
+      <PhotoGallery fragments={fragments} />
+      <SourceFragments fragments={fragments} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  More Action Menu (Drawer)                                         */
 /* ------------------------------------------------------------------ */
 
@@ -386,6 +538,7 @@ export default function DiaryDetail() {
   const { scrollY } = useScroll({ container: scrollRef });
   const navBgOpacity = useTransform(scrollY, [0, 20], [0, 0.95]);
   const navBlur = useTransform(scrollY, [0, 20], [0, 12]);
+  const backdropBlur = useTransform(navBlur, (v) => `blur(${v}px)`);
 
   /* tRPC queries */
   const {
@@ -395,15 +548,34 @@ export default function DiaryDetail() {
     refetch: refetchDiary,
   } = trpc.diaries.getByDate.useQuery(
     { date: date! },
-    { enabled: !!date && isAuthenticated, retry: false },
+    {
+      enabled: !!date && isAuthenticated,
+      retry: false,
+      refetchInterval: (query) =>
+        query.state.data?.generationStatus === "pending" ? 3000 : false,
+    },
   );
 
-  const { data: fragments } = trpc.entries.list.useQuery(
+  const { data: rawFragments } = trpc.entries.list.useQuery(
     { date: date! },
     { enabled: !!date && isAuthenticated, staleTime: 60_000 },
   );
+  const fragments = useMemo(
+    () => (rawFragments ? mapEntriesToFragments(rawFragments) : []),
+    [rawFragments],
+  );
 
   /* Mutations */
+  const generateMutation = trpc.diaries.generate.useMutation({
+    onSuccess: () => {
+      toast.success("已开始生成日记，稍后查看");
+      refetchDiary();
+    },
+    onError: () => {
+      toast.error("生成失败，请检查 AI 设置");
+    },
+  });
+
   const regenerateMutation = trpc.diaries.regenerate.useMutation({
     onSuccess: () => {
       setIsRegenerating(false);
@@ -464,6 +636,11 @@ export default function DiaryDetail() {
     regenerateMutation.mutate({ date });
   }, [date, isRegenerating, regenerateMutation]);
 
+  const handleGenerate = useCallback(() => {
+    if (!date || generateMutation.isPending) return;
+    generateMutation.mutate({ date });
+  }, [date, generateMutation]);
+
   /* Auth gate */
   if (!authLoading && !isAuthenticated) {
     return (
@@ -500,8 +677,21 @@ export default function DiaryDetail() {
     );
   }
 
+  const diaryNotFound = diaryError?.message === "Diary not found for this date";
+  const hasFragments = fragments.length > 0;
+
   /* Error / Not found */
   if (diaryError || !diary) {
+    if (diaryNotFound && hasFragments) {
+      return (
+        <DraftDiaryView
+          date={date!}
+          fragments={fragments}
+          onGenerate={handleGenerate}
+          isGenerating={generateMutation.isPending}
+        />
+      );
+    }
     return (
       <div
         className="flex min-h-[100dvh] flex-col items-center justify-center px-6"
@@ -509,9 +699,7 @@ export default function DiaryDetail() {
       >
         <FileTextIcon size={64} strokeWidth={1} style={{ color: "var(--text-tertiary)" }} />
         <p className="mt-4 font-display text-lg">
-          {diaryError?.message === "Diary not found for this date"
-            ? "这篇日记不存在"
-            : "加载失败"}
+          {diaryNotFound ? "这篇日记不存在" : "加载失败"}
         </p>
         <p className="mt-2 font-ui text-sm" style={{ color: "var(--text-tertiary)" }}>
           {date}
@@ -550,8 +738,8 @@ export default function DiaryDetail() {
           style={{
             backgroundColor: "var(--bg-primary)",
             opacity: navBgOpacity,
-            backdropFilter: useTransform(navBlur, (v) => `blur(${v}px)`),
-            WebkitBackdropFilter: useTransform(navBlur, (v) => `blur(${v}px)`),
+            backdropFilter: backdropBlur,
+            WebkitBackdropFilter: backdropBlur,
           }}
         />
 
@@ -732,8 +920,6 @@ export default function DiaryDetail() {
         isDeleting={deleteMutation.isPending}
       />
 
-      {/* Toast notifications */}
-      <Toaster position="top-center" />
     </div>
   );
 }

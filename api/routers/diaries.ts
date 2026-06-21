@@ -13,6 +13,8 @@ import {
   findVersionsByDiaryId,
   deleteDiary,
 } from "../queries/diaries";
+import { findAiSettingsByUserId } from "../queries/ai-settings";
+import { generateDiaryForDate } from "../services/diary";
 
 export const diariesRouter = createRouter({
   // ── queries ──────────────────────────────────────────────────────
@@ -73,9 +75,24 @@ export const diariesRouter = createRouter({
   generate: authedQuery
     .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD") }))
     .mutation(async ({ ctx, input }) => {
+      // Check if diary model is configured
+      const settings = await findAiSettingsByUserId(ctx.user.id);
+      if (!settings || !settings.diaryApiKey || !settings.diaryApiBaseUrl) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Diary model not configured. Please set it up in Settings.",
+        });
+      }
+
       // Check if diary already exists for this date
       const existing = await findDiaryByDate(ctx.user.id, input.date);
       if (existing) {
+        if (existing.generationStatus === "pending") {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Diary generation is already in progress for this date.",
+          });
+        }
         throw new TRPCError({
           code: "CONFLICT",
           message: "Diary already exists for this date. Use regenerate instead.",
@@ -95,8 +112,11 @@ export const diariesRouter = createRouter({
         });
       }
 
-      // TODO: Trigger async diary generation via AI service
-      // For now, return the pending diary record
+      // Trigger async diary generation
+      generateDiaryForDate(ctx.user.id, input.date).catch((err) => {
+        console.error("[diaries.generate] background generation failed:", err);
+      });
+
       return diary;
     }),
 
@@ -124,11 +144,27 @@ export const diariesRouter = createRouter({
   regenerate: authedQuery
     .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD") }))
     .mutation(async ({ ctx, input }) => {
+      // Check if diary model is configured
+      const settings = await findAiSettingsByUserId(ctx.user.id);
+      if (!settings || !settings.diaryApiKey || !settings.diaryApiBaseUrl) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Diary model not configured. Please set it up in Settings.",
+        });
+      }
+
       const diary = await findDiaryByDate(ctx.user.id, input.date);
       if (!diary) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Diary not found for this date",
+        });
+      }
+
+      if (diary.generationStatus === "pending") {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Diary generation is already in progress for this date.",
         });
       }
 
@@ -153,7 +189,11 @@ export const diariesRouter = createRouter({
         });
       }
 
-      // TODO: Trigger async diary generation via AI service
+      // Trigger async diary generation
+      generateDiaryForDate(ctx.user.id, input.date).catch((err) => {
+        console.error("[diaries.regenerate] background generation failed:", err);
+      });
+
       return updated;
     }),
 
