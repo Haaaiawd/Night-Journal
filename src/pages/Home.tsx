@@ -442,17 +442,22 @@ function BottomDrawer({
       }
     }
 
-    await onSubmit({
-      type: isEdit ? (images.length > 0 ? 'mixed' : 'text') : (imageFiles.length > 0 ? 'mixed' : 'text'),
-      content: textValue.trim(),
-      images: isEdit ? images : uploadedAttachments?.map((a) => a.fileUrl),
-      mood: selectedMood,
-    }, uploadedAttachments)
+    try {
+      await onSubmit({
+        type: isEdit ? (images.length > 0 ? 'mixed' : 'text') : (imageFiles.length > 0 ? 'mixed' : 'text'),
+        content: textValue.trim(),
+        images: isEdit ? images : uploadedAttachments?.map((a) => a.fileUrl),
+        mood: selectedMood,
+      }, uploadedAttachments)
 
-    setIsSubmitting(false)
-    setShowSuccess(true)
-    await new Promise((r) => setTimeout(r, 400))
-    handleClose()
+      setShowSuccess(true)
+      await new Promise((r) => setTimeout(r, 400))
+      handleClose()
+    } catch {
+      // mutation onError already shows a toast
+    } finally {
+      setIsSubmitting(false)
+    }
   }, [selectedMood, textValue, imageFiles, images, isEdit, onSubmit, handleClose])
 
   const canSubmit = selectedMood !== null && textValue.trim().length > 0
@@ -788,6 +793,12 @@ function DatePickerDrawer({
   onSelect: (date: string) => void
 }) {
   const [month, setMonth] = useState<Date>(parseISO(selectedDate))
+  const [prevSelectedDate, setPrevSelectedDate] = useState(selectedDate)
+
+  if (selectedDate !== prevSelectedDate) {
+    setPrevSelectedDate(selectedDate)
+    setMonth(parseISO(selectedDate))
+  }
 
   const handleSelect = useCallback(
     (date: Date | undefined) => {
@@ -952,6 +963,7 @@ export default function Home() {
   const [editingFragment, setEditingFragment] = useState<Fragment | null>(null)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [promptIndex, setPromptIndex] = useState(0)
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dateInfo = useMemo(() => getFormattedDate(activeDateObj), [activeDateObj])
   const [headerStyle, setHeaderStyle] = useState({ opacity: 1, y: 0 })
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1000,11 +1012,19 @@ export default function Home() {
   )
 
   const handleOpenCreate = useCallback(() => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
+    }
     setEditingFragment(null)
     setDrawerOpen(true)
   }, [setEditingFragment, setDrawerOpen])
 
   const handleOpenEdit = useCallback((fragment: Fragment) => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
+    }
     setEditingFragment(fragment)
     setDrawerOpen(true)
   }, [setEditingFragment, setDrawerOpen])
@@ -1154,7 +1174,13 @@ export default function Home() {
         open={drawerOpen}
         onClose={() => {
           setDrawerOpen(false)
-          setTimeout(() => setEditingFragment(null), 300)
+          if (closeTimeoutRef.current) {
+            clearTimeout(closeTimeoutRef.current)
+          }
+          closeTimeoutRef.current = setTimeout(() => {
+            setEditingFragment(null)
+            closeTimeoutRef.current = null
+          }, 300)
         }}
         onSubmit={handleDrawerSubmit}
         mode={editingFragment ? 'edit' : 'create'}
