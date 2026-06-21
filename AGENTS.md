@@ -249,6 +249,7 @@ POST /api/auth/login  { username, password }
 | `KIMI_OPEN_URL` | 可选 | Kimi Open API 地址 |
 | `OWNER_UNION_ID` | 可选 | 管理员 union_id |
 | `PORT` | 可选 | 监听端口，默认 3000 |
+| `ENABLE_AUTO_GENERATION_IN_DEV` | 可选 | 设为 `true` 时在开发模式下启用自动日记生成调度器（生产环境默认启用） |
 
 完整示例见 `.env.example`。`VITE_*` 变量已废弃，前端不使用 Vite 环境变量。
 

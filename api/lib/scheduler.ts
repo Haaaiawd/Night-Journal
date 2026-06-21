@@ -66,7 +66,6 @@ async function processUser(user: { id: number }) {
   if (time < settings.diaryGenerationTime) return;
 
   if (lastProcessedDate.get(user.id) === yesterday) return;
-  lastProcessedDate.set(user.id, yesterday);
 
   const entries = await findEntriesByDate(user.id, yesterday);
   if (entries.length === 0) return;
@@ -77,8 +76,11 @@ async function processUser(user: { id: number }) {
   const diary = await ensurePendingDiary(user.id, yesterday);
   if (!diary) return;
 
+  lastProcessedDate.set(user.id, yesterday);
+
   generateDiaryForDate(user.id, yesterday).catch((err) => {
     console.error(`[scheduler] auto-generation failed for user ${user.id} date ${yesterday}:`, err);
+    lastProcessedDate.delete(user.id);
   });
 }
 
