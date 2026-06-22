@@ -1,4 +1,4 @@
-import { eq, and, desc, lt, sql } from "drizzle-orm";
+import { eq, and, desc, lt, gte, sql } from "drizzle-orm";
 import { getDb } from "../connection";
 import { userProfiles, shortTermMemories } from "@db/schema";
 import type { ShortTermMemory } from "@db/schema";
@@ -139,10 +139,11 @@ export async function findActiveShortTermMemories(
   userId: number,
   limit = 10,
 ): Promise<ShortTermMemory[]> {
+  const now = new Date();
   return getDb()
     .select()
     .from(shortTermMemories)
-    .where(eq(shortTermMemories.userId, userId))
+    .where(and(eq(shortTermMemories.userId, userId), gte(shortTermMemories.decayAt, now)))
     .orderBy(desc(shortTermMemories.importance), desc(shortTermMemories.lastReferencedAt))
     .limit(limit);
 }
