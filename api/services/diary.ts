@@ -5,7 +5,12 @@ import { findAiSettingsByUserId } from "../queries/ai-settings";
 import { findDiaryByDate, updateDiary } from "../queries/diaries";
 import { findProfileByUserId, findActiveShortTermMemories } from "../queries/memories";
 import { dreamProfile } from "./dream";
-import { DEFAULT_DIARY_PROMPT, DEFAULT_STYLE_PROMPTS } from "@contracts/prompts";
+import {
+  DEFAULT_DIARY_SYSTEM_PROMPT,
+  DEFAULT_DIARY_USER_TEMPLATE,
+  DEFAULT_STYLE_PROMPTS,
+  splitDiaryPrompt,
+} from "@contracts/prompts";
 import type { ShortTermMemory } from "@db/schema";
 
 // In-process guard: prevents the same (userId, date) Dream pass from
@@ -171,6 +176,15 @@ ${imageSummaries}
   return DIARY_PLACEHOLDERS.reduce((acc, key) => acc.replaceAll(key, values[key.slice(2, -2)] ?? ""), template);
 }
 
+/**
+ * Extract the system/instruction part from a user-defined diary prompt template.
+ * Falls back to the default system prompt when no separator is present.
+ */
+function extractSystemPart(template: string): string {
+  const { system } = splitDiaryPrompt(template);
+  return system ?? DEFAULT_DIARY_SYSTEM_PROMPT;
+}
+
 function parseDiaryResponse(
   content: string,
 ): { title: string; summary: string; content: string } | null {
@@ -214,7 +228,16 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
     const length = settings.diaryLength ?? "中";
     const language = settings.diaryLanguage ?? "zh";
     const stylePrompt = getStylePrompt(style, settings.stylePrompts);
-    const promptTemplate = settings.diaryPromptTemplate || DEFAULT_DIARY_PROMPT;
+
+    // The user's diaryPromptTemplate historically served as both system and
+    // user message. We now split it cleanly: system = instructions, user =
+    // data template with placeholders. If the user has customized the template,
+    // we treat it as the user-message template (they control what the model
+    // sees). If they have not customized it, we use the new clean defaults.
+    const userPromptTemplate = settings.diaryPromptTemplate || DEFAULT_DIARY_USER_TEMPLATE;
+    const systemPrompt = settings.diaryPromptTemplate
+      ? extractSystemPart(settings.diaryPromptTemplate)
+      : DEFAULT_DIARY_SYSTEM_PROMPT;
 
     // Load Dream memory (profile + active short-term memories) for prompt
     // injection. Skipped when the user has disabled Dream or no profile
@@ -244,7 +267,7 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
         fragments: entries,
         memory,
       },
-      promptTemplate,
+      userPromptTemplate,
     );
 
     const content = await callChatModel({
@@ -252,7 +275,7 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
       baseUrl: settings.diaryApiBaseUrl,
       model: settings.diaryModel ?? undefined,
       messages: [
-        { role: "system", content: promptTemplate },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ],
       maxTokens: 2048,
