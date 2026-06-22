@@ -176,15 +176,6 @@ ${imageSummaries}
   return DIARY_PLACEHOLDERS.reduce((acc, key) => acc.replaceAll(key, values[key.slice(2, -2)] ?? ""), template);
 }
 
-/**
- * Extract the system/instruction part from a user-defined diary prompt template.
- * Falls back to the default system prompt when no separator is present.
- */
-function extractSystemPart(template: string): string {
-  const { system } = splitDiaryPrompt(template);
-  return system ?? DEFAULT_DIARY_SYSTEM_PROMPT;
-}
-
 function parseDiaryResponse(
   content: string,
 ): { title: string; summary: string; content: string } | null {
@@ -229,15 +220,29 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
     const language = settings.diaryLanguage ?? "zh";
     const stylePrompt = getStylePrompt(style, settings.stylePrompts);
 
-    // The user's diaryPromptTemplate historically served as both system and
-    // user message. We now split it cleanly: system = instructions, user =
-    // data template with placeholders. If the user has customized the template,
-    // we treat it as the user-message template (they control what the model
-    // sees). If they have not customized it, we use the new clean defaults.
-    const userPromptTemplate = settings.diaryPromptTemplate || DEFAULT_DIARY_USER_TEMPLATE;
-    const systemPrompt = settings.diaryPromptTemplate
-      ? extractSystemPart(settings.diaryPromptTemplate)
-      : DEFAULT_DIARY_SYSTEM_PROMPT;
+    // Split the stored template into system (instructions) and user (data
+    // template with placeholders). Three cases:
+    //   1. No custom template → use clean defaults for both.
+    //   2. Custom template WITH separator (---) → extract each part.
+    //   3. Legacy custom template WITHOUT separator → preserve it as the
+    //      system prompt (old behavior) and use the default user template.
+    const split = settings.diaryPromptTemplate
+      ? splitDiaryPrompt(settings.diaryPromptTemplate)
+      : null;
+
+    let systemPrompt: string;
+    let userPromptTemplate: string;
+
+    if (!split) {
+      systemPrompt = DEFAULT_DIARY_SYSTEM_PROMPT;
+      userPromptTemplate = DEFAULT_DIARY_USER_TEMPLATE;
+    } else if (split.system !== null) {
+      systemPrompt = split.system;
+      userPromptTemplate = split.user;
+    } else {
+      systemPrompt = settings.diaryPromptTemplate!;
+      userPromptTemplate = DEFAULT_DIARY_USER_TEMPLATE;
+    }
 
     // Load Dream memory (profile + active short-term memories) for prompt
     // injection. Skipped when the user has disabled Dream or no profile
