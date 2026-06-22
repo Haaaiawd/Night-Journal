@@ -52,11 +52,13 @@ import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
 import { LOGIN_PATH } from '@/const'
 import useTheme from '@/hooks/useTheme'
-
-/* ── default prompts ── */
-const DEFAULT_VISION_PROMPT = `你是一个私人记忆整理系统中的图片理解助手。你的任务不是普通看图识物，而是把用户上传的图片转化成可以用于日记写作的"记忆素材"。\n\n你会收到：\n1. 图片\n2. 图片对应记录的文字\n3. 图片创建时间\n4. 当天前后若干条文字记录作为上下文\n5. 当天日期\n\n请你根据图片和上下文，生成一段适合放入日记写作素材中的图片概要。\n\n要求：\n1. 先描述图片中客观可见的内容\n2. 再结合上下文，轻微总结这张图片在当天中的情绪位置\n3. 可以有感性，但不能夸张\n4. 可以有生活气息，但不能编造事实\n5. 不要推测用户身份、健康状况等敏感属性\n6. 不要进行心理诊断\n7. 不要把图片写成广告文案\n8. 不要输出过长内容\n9. 如果图片内容不清楚，请明确说明"不确定"\n10. 如果图片中有文字，尽量提取关键信息\n\n输出 JSON：\n{\n  "objective_description": "图片中客观可见的内容",\n  "emotional_summary": "结合上下文后的感性概要",\n  "usable_diary_material": "适合传给日记模型使用的一段综合描述"\n}`
-
-const DEFAULT_DIARY_PROMPT = `你是一个私人日记整理助手。你的任务不是写总结、不是写任务清单、不是写公众号文章，而是根据用户一天中零散留下的文字、情绪、经历和图片概要，整理成一篇自然、有情绪、有生活质感的日记。\n\n你会收到：\n1. 日期\n2. 用户当天所有文字碎片\n3. 每条碎片的时间\n4. 用户可选的情绪标签\n5. 图片理解模型生成的图片概要\n6. 用户选择的日记风格\n7. 用户选择的日记长度\n\n请遵守：\n1. 不要虚构重大事件\n2. 可以基于用户表达进行轻微文学化整理，但不能改变事实\n3. 不要进行心理诊断\n4. 不要用"你应该""你必须"说教\n5. 不要写成鸡汤\n6. 不要写成公众号文章\n7. 不要写成工作总结\n8. 不要过度积极\n9. 不要过度美化痛苦\n10. 不要制造不存在的人际关系\n11. 信息少时就写短一点，不要硬凑\n12. 保留用户原本的语气、混乱感和情绪纹理\n13. 日记要像用户自己写的，但更完整、更清晰、更有流动感\n14. 图片概要可以融入正文，但不要在正文中插入图片链接\n15. 正文结尾可以留一句轻微的余味，但不要鸡汤\n\n日记长度：\n- 短：300到500字\n- 中：700到1000字\n- 长：1200到1800字\n\n输出 JSON：\n{\n  "title": "日记标题",\n  "summary": "一句话摘要",\n  "content": "完整日记正文"\n}`
+import {
+  DEFAULT_DIARY_SYSTEM_PROMPT,
+  DEFAULT_DIARY_USER_TEMPLATE,
+  DEFAULT_STYLE_PROMPTS,
+  DEFAULT_VISION_PROMPT,
+} from '@contracts/prompts'
+import { splitDiaryPrompt } from '@contracts/prompts'
 
 /* ── constants ── */
 const DIARY_STYLES = [
@@ -71,15 +73,6 @@ const DIARY_STYLES = [
 // Default per-style prompt snippets. Users can edit and override these.
 // When generating a diary, the selected style's snippet gets injected into
 // the main diary prompt to steer the LLM's writing voice.
-const DEFAULT_STYLE_PROMPTS: Record<string, string> = {
-  '温柔真实': '像朋友间的轻声倾诉，语气温柔但真实。不刻意渲染情绪，让日常细节自然流露。多用短句，偶尔停下来，像在想什么事情。',
-  '文学感': '用细腻的文学化语言，可以有比喻和意象。句式错落有致，注重画面感和节奏感。允许适度的文学化加工，但不能改变事实。',
-  '克制冷静': '简洁、客观、观察者的视角。少用形容词，让事实本身说话。情绪藏在留白和沉默里，不直接说出来。',
-  '情绪充沛': '允许情感饱满地流露，可以直抒胸臆。不用克制，但不要无病呻吟。情绪是真实的，就让它出来。',
-  '像写给未来的自己': '以时间胶囊的口吻叙述，像在跟未来的自己对话。可以带有回顾和期许，但不要说教。把今天留给未来的自己去读。',
-  '清醒但不冷漠': '理性中带着温度。有观察有思考，但不冷硬。保持对生活的善意，看清楚了依然温柔。',
-}
-
 const DIARY_LENGTHS = [
   { value: '短', range: '300-500字' },
   { value: '中', range: '700-1000字' },
@@ -898,7 +891,8 @@ function WriterModelTab() {
   const [style, setStyle] = useState('温柔真实')
   const [length, setLength] = useState('中')
   const [genTime, setGenTime] = useState('02:00')
-  const [prompt, setPrompt] = useState(DEFAULT_DIARY_PROMPT)
+  const [userPromptTemplate, setUserPromptTemplate] = useState(DEFAULT_DIARY_USER_TEMPLATE)
+  const [systemPrompt, setSystemPrompt] = useState(DEFAULT_DIARY_SYSTEM_PROMPT)
   const [stylePromptsMap, setStylePromptsMap] = useState<Record<string, string>>(DEFAULT_STYLE_PROMPTS)
   const [showKey, setShowKey] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
@@ -913,7 +907,11 @@ function WriterModelTab() {
       if (settings.diaryStyle) setStyle(settings.diaryStyle)
       if (settings.diaryLength) setLength(settings.diaryLength)
       if (settings.diaryGenerationTime) setGenTime(settings.diaryGenerationTime)
-      if (settings.diaryPromptTemplate) setPrompt(settings.diaryPromptTemplate)
+      if (settings.diaryPromptTemplate) {
+        const { system, user } = splitDiaryPrompt(settings.diaryPromptTemplate)
+        setSystemPrompt(system ?? DEFAULT_DIARY_SYSTEM_PROMPT)
+        setUserPromptTemplate(user || DEFAULT_DIARY_USER_TEMPLATE)
+      }
       if (settings.stylePrompts) {
         try {
           const parsed = JSON.parse(settings.stylePrompts) as Record<string, string>
@@ -945,14 +943,14 @@ function WriterModelTab() {
       diaryStyle: style,
       diaryLength: length,
       diaryGenerationTime: genTime,
-      diaryPromptTemplate: prompt || undefined,
+      diaryPromptTemplate: `${systemPrompt}\n\n---\n\n${userPromptTemplate}` || undefined,
       stylePrompts: JSON.stringify(stylePromptsMap),
     }
     if (apiKey.trim()) {
       payload.diaryApiKey = apiKey.trim()
     }
     updateDiary.mutate(payload)
-  }, [apiBase, apiKey, modelName, language, style, length, genTime, prompt, stylePromptsMap, updateDiary])
+  }, [apiBase, apiKey, modelName, language, style, length, genTime, systemPrompt, userPromptTemplate, stylePromptsMap, updateDiary])
 
   const handleTest = useCallback(async () => {
     const keyToTest = apiKey.trim()
@@ -976,7 +974,10 @@ function WriterModelTab() {
     }
   }, [apiKey, apiBase, modelName, testDiary])
 
-  const handleResetPrompt = () => setPrompt(DEFAULT_DIARY_PROMPT)
+  const handleResetPrompt = () => {
+    setSystemPrompt(DEFAULT_DIARY_SYSTEM_PROMPT)
+    setUserPromptTemplate(DEFAULT_DIARY_USER_TEMPLATE)
+  }
 
   const handleStylePromptChange = useCallback((styleKey: string, value: string) => {
     setStylePromptsMap((prev) => ({ ...prev, [styleKey]: value }))
@@ -1403,18 +1404,42 @@ function WriterModelTab() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 p-4">
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className="min-h-[300px] resize-y rounded-xl border font-mono text-sm leading-relaxed"
-              style={{
-                backgroundColor: 'var(--bg-elevated)',
-                borderColor: 'var(--divider)',
-                color: 'var(--text-primary)',
-                fontFamily: "'DM Sans', monospace",
-              }}
-              aria-label="日记写作 Prompt 模板"
-            />
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs" style={{ color: 'var(--text-secondary)' }}>系统提示词（角色、规则、输出格式）</Label>
+              <Textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                className="min-h-[180px] resize-y rounded-xl border font-mono text-sm leading-relaxed"
+                style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  borderColor: 'var(--divider)',
+                  color: 'var(--text-primary)',
+                  fontFamily: "'DM Sans', monospace",
+                }}
+                aria-label="日记系统 Prompt"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs" style={{ color: 'var(--text-secondary)' }}>用户提示词模板（数据占位符会被替换）</Label>
+              <Textarea
+                value={userPromptTemplate}
+                onChange={(e) => setUserPromptTemplate(e.target.value)}
+                className="min-h-[180px] resize-y rounded-xl border font-mono text-sm leading-relaxed"
+                style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  borderColor: 'var(--divider)',
+                  color: 'var(--text-primary)',
+                  fontFamily: "'DM Sans', monospace",
+                }}
+                aria-label="日记用户 Prompt 模板"
+              />
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              可用占位符（用户提示词中会被自动替换）：{' '}
+              <code className="rounded px-1 py-0.5 font-mono text-[11px]" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                {'{{date}} {{language}} {{style}} {{stylePrompt}} {{length}} {{fragments}} {{imageSummaries}} {{memoryBlock}}'}
+              </code>
+            </p>
             <div className="flex items-center justify-between">
               <Button
                 variant="ghost"
