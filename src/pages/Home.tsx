@@ -887,10 +887,26 @@ export default function Home() {
   const activeDate = useMemo(() => getActiveDate(searchParams), [searchParams])
   const activeDateObj = useMemo(() => parseISO(activeDate), [activeDate])
 
-  // Load entries for the active date from the server
+  // Load entries for the active date from the server.
+  // Conditional polling: only refetch while at least one attachment is still
+  // pending vision analysis. Once all are completed/failed, polling stops —
+  // no needless background traffic. Combined with the backend's guarantee
+  // that pending always terminates (entries router marks failed when vision
+  // is unconfigured), this ensures the UI loader never spins forever.
   const { data: serverEntries = [] } = trpc.entries.list.useQuery(
     { date: activeDate },
-    { enabled: isAuthenticated, staleTime: 1000 * 30 },
+    {
+      enabled: isAuthenticated,
+      staleTime: 1000 * 30,
+      refetchInterval: (query) => {
+        const entries = query.state.data
+        if (!entries) return false
+        const hasPending = entries.some((e: { attachments?: Array<{ visionStatus: string }> }) =>
+          e.attachments?.some((a) => a.visionStatus === 'pending'),
+        )
+        return hasPending ? 3000 : false
+      },
+    },
   )
 
   // Mutation to persist a new entry
