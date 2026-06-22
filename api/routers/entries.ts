@@ -148,7 +148,12 @@ async function triggerVisionAnalysis(
   for (const dbAtt of dbAttachments) {
     try {
       const base64 = readFileAsBase64(dbAtt.storagePath);
-      if (!base64) continue;
+      if (!base64) {
+        // File missing/unreadable — must terminate pending, same class as
+        // the unconfigured-vision fix above. Otherwise frontend polls forever.
+        await updateAttachmentVision(dbAtt.id, { visionStatus: "failed" });
+        continue;
+      }
 
       const mimeType = dbAtt.fileType || "image/jpeg";
       const fullPrompt = `${prompt}\n\n关联文字: ${contextText}\n创建时间: ${new Date().toISOString()}`;
