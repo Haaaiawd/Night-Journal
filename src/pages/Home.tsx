@@ -35,6 +35,7 @@ interface AttachmentMeta {
   visionStatus: string
   visionSummary?: string
   visionModelUsed?: string
+  createdAt?: Date
 }
 
 interface Fragment {
@@ -887,10 +888,37 @@ export default function Home() {
   const activeDate = useMemo(() => getActiveDate(searchParams), [searchParams])
   const activeDateObj = useMemo(() => parseISO(activeDate), [activeDate])
 
-  // Load entries for the active date from the server
+  // Load entries for the active date from the server.
+  // Conditional polling: only refetch while at least one attachment is still
+  // pending vision analysis. Once all are completed/failed, polling stops —
+  // no needless background traffic. Combined with the backend's guarantee
+  // that pending always terminates (entries router marks failed when vision
+  // is unconfigured or file unreadable), this ensures the UI loader never
+  // spins forever.
+  // Safety bound: stop polling after 5 minutes per attachment, so a stuck
+  // DB record (e.g. process crash mid-vision) can't poll indefinitely.
+  const VISION_POLL_INTERVAL = 3000
+  const VISION_POLL_MAX_AGE_MS = 5 * 60 * 1000
   const { data: serverEntries = [] } = trpc.entries.list.useQuery(
     { date: activeDate },
-    { enabled: isAuthenticated, staleTime: 1000 * 30 },
+    {
+      enabled: isAuthenticated,
+      staleTime: 1000 * 30,
+      refetchInterval: (query) => {
+        const entries = query.state.data
+        if (!entries) return false
+        const now = Date.now()
+        const hasPending = entries.some(
+          (e: { attachments?: Array<{ visionStatus: string; createdAt?: Date }> }) =>
+            e.attachments?.some((a) => {
+              if (a.visionStatus !== 'pending') return false
+              if (!a.createdAt) return true // unknown age — keep polling conservatively
+              return now - a.createdAt.getTime() < VISION_POLL_MAX_AGE_MS
+            }),
+        )
+        return hasPending ? VISION_POLL_INTERVAL : false
+      },
+    },
   )
 
   // Mutation to persist a new entry
@@ -938,6 +966,7 @@ export default function Home() {
       visionStatus: string
       visionSummary?: string
       visionModelUsed?: string
+      createdAt?: Date
     }> }).attachments
     const attachmentUrls = attachments
       ?.map((a) => a.fileUrl)
@@ -947,6 +976,7 @@ export default function Home() {
       visionStatus: a.visionStatus,
       visionSummary: a.visionSummary,
       visionModelUsed: a.visionModelUsed,
+      createdAt: a.createdAt,
     }))
     return {
       id: String(entry.id),

@@ -115,25 +115,53 @@ async function triggerVisionAnalysis(
   contextText: string,
 ) {
   const settings = await findAiSettingsByUserId(userId);
-  if (!settings || !settings.enableImageUnderstanding) return;
-  if (!settings.visionApiKey || !settings.visionApiBaseUrl) return;
+
+  // Determine whether vision analysis is actually configured.
+  // If not, we must still terminate the pending state on every attachment,
+  // otherwise the UI loader spins forever (see seed-01: throw/return before
+  // state update leaves orphan pending records).
+  const visionApiKey = settings?.visionApiKey ?? null;
+  const visionApiBaseUrl = settings?.visionApiBaseUrl ?? null;
+  const configured =
+    !!settings &&
+    settings.enableImageUnderstanding &&
+    !!visionApiKey &&
+    !!visionApiBaseUrl;
 
   const dbAttachments = await findAttachmentsByEntryId(entryId);
-  const prompt = settings.visionPromptTemplate ||
+
+  if (!configured) {
+    for (const att of dbAttachments) {
+      await updateAttachmentVision(att.id, { visionStatus: "failed" }).catch(
+        (err) => console.error(`[vision] Failed to mark ${att.id}:`, err),
+      );
+    }
+    return;
+  }
+
+  // configured === true guarantees non-null here
+  const apiKey = visionApiKey as string;
+  const apiBaseUrl = visionApiBaseUrl as string;
+  const prompt = settings!.visionPromptTemplate ||
     "请描述这张图片的内容，并结合以下文字上下文生成适合日记写作的图片素材描述。";
 
   for (const dbAtt of dbAttachments) {
     try {
       const base64 = readFileAsBase64(dbAtt.storagePath);
-      if (!base64) continue;
+      if (!base64) {
+        // File missing/unreadable — must terminate pending, same class as
+        // the unconfigured-vision fix above. Otherwise frontend polls forever.
+        await updateAttachmentVision(dbAtt.id, { visionStatus: "failed" });
+        continue;
+      }
 
       const mimeType = dbAtt.fileType || "image/jpeg";
       const fullPrompt = `${prompt}\n\n关联文字: ${contextText}\n创建时间: ${new Date().toISOString()}`;
 
       const result = await callVisionModel({
-        apiKey: settings.visionApiKey,
-        baseUrl: settings.visionApiBaseUrl,
-        model: settings.visionModel ?? undefined,
+        apiKey,
+        baseUrl: apiBaseUrl,
+        model: settings!.visionModel ?? undefined,
         prompt: fullPrompt,
         imageBase64: base64,
         imageMimeType: mimeType,
