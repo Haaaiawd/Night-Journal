@@ -89,8 +89,8 @@ const SHORT_TERM_DECAY_DAYS = 14;
 /**
  * Merge newly extracted short-term memories into storage atomically.
  *
- * Uses INSERT ... ON DUPLICATE KEY UPDATE with the `(user_id, content,
- * archived)` unique index. On conflict (active row with same content):
+ * Uses INSERT ... ON DUPLICATE KEY UPDATE with the `(user_id, content)`
+ * unique index. On conflict (existing row with same content):
  *  - lastReferencedAt always refreshed (it was referenced)
  *  - decayAt extended by 14 days ONLY if firstSeenAt is under 30 days old
  *  - importance raised to the max of existing and new
@@ -117,14 +117,13 @@ export async function mergeShortTermMemories(userId: number, inputs: ShortTermMe
         firstSeenAt: now,
         lastReferencedAt: now,
         decayAt,
-        archived: false,
       })
       .onDuplicateKeyUpdate({
         set: {
           lastReferencedAt: now,
           // Only extend decay if the memory is under the max age cap.
           // Over-cap memories keep their existing decayAt so they
-          // eventually archive.
+          // eventually expire and get deleted.
           decayAt: sql`IF(TIMESTAMPDIFF(DAY, first_seen_at, NOW()) > ${SHORT_TERM_MAX_AGE_DAYS}, decay_at, ${decayAt})`,
           importance: sql`GREATEST(importance, ${input.importance})`,
         },
@@ -133,8 +132,8 @@ export async function mergeShortTermMemories(userId: number, inputs: ShortTermMe
 }
 
 /**
- * Active (non-archived) memories for a user, ordered by importance then
- * recency of reference. Used for prompt injection and the Settings view.
+ * Active memories for a user, ordered by importance then recency of
+ * reference. Used for prompt injection and the Settings view.
  */
 export async function findActiveShortTermMemories(
   userId: number,
@@ -143,37 +142,32 @@ export async function findActiveShortTermMemories(
   return getDb()
     .select()
     .from(shortTermMemories)
-    .where(
-      and(
-        eq(shortTermMemories.userId, userId),
-        eq(shortTermMemories.archived, false),
-      ),
-    )
+    .where(eq(shortTermMemories.userId, userId))
     .orderBy(desc(shortTermMemories.importance), desc(shortTermMemories.lastReferencedAt))
     .limit(limit);
 }
 
 /**
- * Archive all memories whose decayAt has passed. Called from the scheduler
- * tick once per day. Returns the count archived (useful for logging).
+ * Delete all memories whose decayAt has passed. Called from the scheduler
+ * tick once per day, and after each Dream pass for a specific user.
+ * Returns the count deleted (useful for logging).
+ *
+ * Hard-deletes (not soft-archives) so that the same content can be
+ * re-created fresh by a future Dream pass without unique-constraint
+ * collisions.
  */
 export async function archiveExpiredMemories(userId?: number): Promise<number> {
   const db = getDb();
   const now = new Date();
-  const conditions = [
-    lt(shortTermMemories.decayAt, now),
-    eq(shortTermMemories.archived, false),
-  ];
+  const conditions = [lt(shortTermMemories.decayAt, now)];
   if (userId !== undefined) {
     conditions.push(eq(shortTermMemories.userId, userId));
   }
 
   const result = await db
-    .update(shortTermMemories)
-    .set({ archived: true })
+    .delete(shortTermMemories)
     .where(and(...conditions));
 
-  // mysql2 returns affectedRows on the result object
   const affected = (result as unknown as { affectedRows?: number }).affectedRows;
   return typeof affected === "number" ? affected : 0;
 }

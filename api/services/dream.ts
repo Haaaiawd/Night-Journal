@@ -18,7 +18,7 @@
  *    output so they decay naturally.
  *
  * The result is upserted into `user_profiles` and merged into
- * `short_term_memories`. Expired short-term memories are archived.
+ * `short_term_memories`. Expired short-term memories are deleted.
  */
 
 import { callChatModel } from "../lib/openai";

@@ -127,7 +127,6 @@ describe("memories.listShortTerm", () => {
         firstSeenAt: new Date(),
         lastReferencedAt: new Date(),
         decayAt: new Date(),
-        archived: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       },

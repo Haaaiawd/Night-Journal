@@ -103,18 +103,22 @@ export function startScheduler(intervalMinutes = 1) {
         ),
       );
 
-      // Once-per-day memory decay sweep across all users. Uses the first
-      // user's timezone date as a rough "today" marker — exact timezone
-      // doesn't matter since archiving is idempotent and a few hours of
-      // skew is irrelevant for a 14-day decay window.
+      // Once-per-day memory decay sweep across all users. Uses today's
+      // date as a rough marker — exact timezone doesn't matter since
+      // deletion is idempotent and a few hours of skew is irrelevant for
+      // a 14-day decay window.
+      //
+      // The guard is set AFTER the sweep succeeds, so a failure (e.g. DB
+      // connection error) allows retry on the next tick instead of
+      // blocking until tomorrow.
       const todayMarker = format(new Date(), "yyyy-MM-dd");
       if (lastMemoryDecayRun !== todayMarker) {
-        lastMemoryDecayRun = todayMarker;
         try {
-          const archived = await archiveExpiredMemories();
-          if (archived > 0) {
-            console.log(`[scheduler] archived ${archived} expired short-term memories`);
+          const deleted = await archiveExpiredMemories();
+          if (deleted > 0) {
+            console.log(`[scheduler] deleted ${deleted} expired short-term memories`);
           }
+          lastMemoryDecayRun = todayMarker;
         } catch (err) {
           console.error("[scheduler] memory decay sweep failed:", err);
         }

@@ -211,21 +211,24 @@ export type InsertUserProfile = typeof userProfiles.$inferInsert;
 //
 // Multi-row per user. Abstract descriptions of recent state (e.g. "recently
 // under deadline pressure"), NOT concrete events. Decays after 14 days;
-// archived (not deleted) when decayAt passes. Referenced memories refresh
+// deleted when decayAt passes. Referenced memories refresh
 // lastReferencedAt to stay relevant longer.
+//
+// content is varchar(200) (not TEXT) so it can participate in a unique
+// index — MySQL forbids indexing full TEXT columns (error 1170). The 200
+// char cap is enforced in parseDreamResponse (MAX_MEMORY_CONTENT_LEN).
 
 export const shortTermMemories = mysqlTable(
   "short_term_memories",
   {
     id: serial("id").primaryKey(),
     userId: bigint("user_id", { mode: "number", unsigned: true }).notNull(),
-    content: text("content").notNull(),
+    content: varchar("content", { length: 200 }).notNull(),
     category: mysqlEnum("category", ["mood", "focus", "relationship", "other"]).default("other").notNull(),
     importance: bigint("importance", { mode: "number", unsigned: true }).default(3).notNull(),
     firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
     lastReferencedAt: timestamp("last_referenced_at").defaultNow().notNull(),
     decayAt: timestamp("decay_at").notNull(),
-    archived: boolean("archived").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -234,10 +237,10 @@ export const shortTermMemories = mysqlTable(
   },
   (table) => ({
     // Ensures mergeShortTermMemories can use INSERT ... ON DUPLICATE KEY
-    // UPDATE safely: at most one active (archived=false) row per
-    // (user_id, content). Archived rows are excluded so a memory can be
-    // re-created fresh after being archived.
-    activeContentUnique: uniqueIndex("active_content_unique").on(table.userId, table.content, table.archived),
+    // UPDATE safely: at most one row per (user_id, content). Expired
+    // memories are hard-deleted (not soft-archived), so a memory can be
+    // re-created fresh after its previous incarnation expired.
+    contentUnique: uniqueIndex("content_unique").on(table.userId, table.content),
   }),
 );
 
