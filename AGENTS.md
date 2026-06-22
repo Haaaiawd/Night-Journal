@@ -16,6 +16,8 @@
 3. **读取 `.anws/v{N}/05A_TASKS.md` 与 `05B_VERIFICATION_PLAN.md`** → 了解执行与验证待办
 4. **开始工作**
 
+> **提 PR 前必读 `CONTRIBUTING.md`** — 分支命名、commit 格式、PR 模板、测试要求的完整规范都在里面。不按规范提的 PR 会被打回。
+
 ---
 
 ## 地图 (领地感知)
