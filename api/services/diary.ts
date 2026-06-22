@@ -3,6 +3,16 @@ import { callChatModel } from "../lib/openai";
 import { findEntriesByDate, updateEntry } from "../queries/entries";
 import { findAiSettingsByUserId } from "../queries/ai-settings";
 import { findDiaryByDate, updateDiary } from "../queries/diaries";
+import { findProfileByUserId, findActiveShortTermMemories } from "../queries/memories";
+import { dreamProfile } from "./dream";
+import type { ShortTermMemory } from "@db/schema";
+
+// In-process guard: prevents the same (userId, date) Dream pass from
+// running twice concurrently — e.g. when regenerate + scheduler both
+// trigger generateDiaryForDate in the same tick. Entries are cleared in
+// the .finally() so a failed Dream pass can be retried on the next
+// diary generation.
+const dreamInFlight = new Set<string>();
 
 const DEFAULT_DIARY_PROMPT = `你是一个私人日记整理助手。你的任务不是写总结、不是写任务清单、不是写公众号文章，而是根据用户一天中零散留下的文字、情绪、经历和图片概要，整理成一篇自然、有情绪、有生活质感的日记。
 
@@ -74,8 +84,13 @@ function buildDiaryUserMessage(opts: {
     createdAt: Date;
     attachments?: Array<{ visionSummary: string | null }>;
   }>;
+  memory?: {
+    profileSummary: string | null;
+    languageStyle: string | null;
+    shortTermMemories: ShortTermMemory[];
+  } | null;
 }): string {
-  const { date, language, style, length, stylePrompt, fragments } = opts;
+  const { date, language, style, length, stylePrompt, fragments, memory } = opts;
 
   const fragmentDescriptions = fragments
     .map((f, i) => {
@@ -94,12 +109,33 @@ function buildDiaryUserMessage(opts: {
     .flatMap((f) => f.attachments?.filter((a) => a.visionSummary).map((a) => a.visionSummary) ?? [])
     .filter((s): s is string => !!s);
 
+  // Dream memory block — injected only when a profile exists. The wording
+  // explicitly tells the model NOT to restate these facts; they are
+  // background understanding for continuity, not material to narrate.
+  let memoryBlock = "";
+  if (memory && (memory.profileSummary || memory.shortTermMemories.length > 0)) {
+    const lines: string[] = [];
+    if (memory.profileSummary) {
+      lines.push(`对这个用户的理解：${memory.profileSummary}`);
+    }
+    if (memory.languageStyle) {
+      lines.push(`语风参考：${memory.languageStyle}`);
+    }
+    if (memory.shortTermMemories.length > 0) {
+      const memLines = memory.shortTermMemories
+        .map((m) => `- [${m.category}] ${m.content}`)
+        .join("\n");
+      lines.push(`近期状态：\n${memLines}`);
+    }
+    memoryBlock = `\n你对这个用户的了解（用于保持日记的连续性，不要直接复述或罗列，自然融入即可）：\n${lines.join("\n")}\n`;
+  }
+
   return `日期：${date}
 语言：${language}
 日记风格：${style}
 风格说明：${stylePrompt}
 日记长度：${length}
-
+${memoryBlock}
 今日碎片：
 ${fragmentDescriptions}
 
@@ -154,6 +190,28 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
     const stylePrompt = getStylePrompt(style, settings.stylePrompts);
     const promptTemplate = settings.diaryPromptTemplate || DEFAULT_DIARY_PROMPT;
 
+    // Load Dream memory (profile + active short-term memories) for prompt
+    // injection. Skipped when the user has disabled Dream or no profile
+    // exists yet — both resolve to a null memory block.
+    let memory: {
+      profileSummary: string | null;
+      languageStyle: string | null;
+      shortTermMemories: ShortTermMemory[];
+    } | null = null;
+    if (settings.enableDream !== false) {
+      const [profile, shortTermMemories] = await Promise.all([
+        findProfileByUserId(userId),
+        findActiveShortTermMemories(userId, 5),
+      ]);
+      if (profile || shortTermMemories.length > 0) {
+        memory = {
+          profileSummary: profile?.summary ?? null,
+          languageStyle: profile?.languageStyle ?? null,
+          shortTermMemories,
+        };
+      }
+    }
+
     const userMessage = buildDiaryUserMessage({
       date,
       language,
@@ -161,6 +219,7 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
       length,
       stylePrompt,
       fragments: entries,
+      memory,
     });
 
     const content = await callChatModel({
@@ -192,6 +251,25 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
       generatedAt: new Date(),
       manuallyEdited: false,
     });
+
+    // Trigger an async Dream pass to update the user profile based on the
+    // newly generated diary + recent history. Fire-and-forget: never blocks
+    // or fails the diary generation. Skipped when the user disabled Dream.
+    // The in-process guard prevents duplicate Dream passes for the same
+    // (userId, date) when regenerate + scheduler race in the same tick.
+    if (settings.enableDream !== false) {
+      const dreamKey = `${userId}:${date}`;
+      if (!dreamInFlight.has(dreamKey)) {
+        dreamInFlight.add(dreamKey);
+        dreamProfile(userId, date)
+          .catch((err) => {
+            console.error(`[diary] Dream pass failed for user ${userId} date ${date}:`, err);
+          })
+          .finally(() => {
+            dreamInFlight.delete(dreamKey);
+          });
+      }
+    }
 
     // Mark entries as included (non-critical)
     try {

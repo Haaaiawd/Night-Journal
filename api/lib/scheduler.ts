@@ -4,6 +4,7 @@ import { findAiSettingsByUserId } from "../queries/ai-settings";
 import { findDiaryByDate, createDiary } from "../queries/diaries";
 import { findEntriesByDate } from "../queries/entries";
 import { generateDiaryForDate } from "../services/diary";
+import { archiveExpiredMemories } from "../queries/memories";
 
 const PENDING_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -11,6 +12,10 @@ const PENDING_TIMEOUT_MS = 10 * 60 * 1000;
 // in one server instance. If the server restarts, the guard is lost, but the
 // diary row status prevents duplicate work.
 const lastProcessedDate = new Map<number, string>();
+
+// In-memory guard so the memory-decay sweep runs at most once per day per
+// server instance. Reset on restart, which is fine — archiving is idempotent.
+let lastMemoryDecayRun: string | null = null;
 
 function getLocalDateTimeParts(timezone: string): { date: string; time: string; yesterday: string } {
   const localString = new Date().toLocaleString("sv-SE", { timeZone: timezone, hour12: false });
@@ -97,6 +102,23 @@ export function startScheduler(intervalMinutes = 1) {
           }),
         ),
       );
+
+      // Once-per-day memory decay sweep across all users. Uses the first
+      // user's timezone date as a rough "today" marker — exact timezone
+      // doesn't matter since archiving is idempotent and a few hours of
+      // skew is irrelevant for a 14-day decay window.
+      const todayMarker = format(new Date(), "yyyy-MM-dd");
+      if (lastMemoryDecayRun !== todayMarker) {
+        lastMemoryDecayRun = todayMarker;
+        try {
+          const archived = await archiveExpiredMemories();
+          if (archived > 0) {
+            console.log(`[scheduler] archived ${archived} expired short-term memories`);
+          }
+        } catch (err) {
+          console.error("[scheduler] memory decay sweep failed:", err);
+        }
+      }
     } catch (err) {
       console.error("[scheduler] tick failed:", err);
     }

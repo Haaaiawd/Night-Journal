@@ -79,11 +79,12 @@
 
 ## 当前状态
 
-- **最近一次更新**: 2026 — 新增账号密码登录、Docker 一键部署（自动迁移）
+- **最近一次更新**: 2026 — 新增账号密码登录、Docker 一键部署（自动迁移）、Dream 记忆机制
 - **认证**: 账号密码（bcrypt cost=12）+ Kimi OAuth 2.0 并行，统一 JWT session
 - **数据库迁移**: 自动 — 容器启动时由 `entrypoint.sh` 执行 `drizzle-kit migrate`
 - **部署方式**: `docker compose up -d --build` 即完成全部，无需手动建表
-- **测试状态**: 52 个单元测试全部通过（vitest），覆盖账号密码注册/登录、OAuth、JWT、env、diaries
+- **Dream 记忆机制**: 日记生成后异步提炼用户画像（人格/关系/情绪/语风）+ 短期记忆（14天衰减），注入后续日记 prompt 提供连续性。Settings "记忆" tab 可只读+删除。`aiSettings.enableDream` 开关控制
+- **测试状态**: 68 个单元测试全部通过（vitest），覆盖账号密码注册/登录、OAuth、JWT、env、diaries、memories 路由、Dream 响应解析
 
 ---
 

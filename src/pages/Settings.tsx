@@ -26,6 +26,7 @@ import {
   RotateCcw,
   Save,
   FolderOpen,
+  Brain,
 } from 'lucide-react'
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -112,7 +113,7 @@ const cardItem = {
 }
 
 /* ── types ── */
-type TabId = 'account' | 'image' | 'writer' | 'theme' | 'data'
+type TabId = 'account' | 'image' | 'writer' | 'memory' | 'theme' | 'data'
 
 interface TabDef {
   id: TabId
@@ -124,6 +125,7 @@ const TABS: TabDef[] = [
   { id: 'account', label: '账户', Icon: User },
   { id: 'image', label: '图片模型', Icon: Image },
   { id: 'writer', label: '写作模型', Icon: PenTool },
+  { id: 'memory', label: '记忆', Icon: Brain },
   { id: 'theme', label: '主题', Icon: Palette },
   { id: 'data', label: '数据', Icon: Database },
 ]
@@ -393,6 +395,9 @@ export default function SettingsPage() {
               </TabsContent>
               <TabsContent value="writer" className="mt-0">
                 <WriterModelTab />
+              </TabsContent>
+              <TabsContent value="memory" className="mt-0">
+                <MemoryTab />
               </TabsContent>
               <TabsContent value="theme" className="mt-0">
                 <ThemeTab />
@@ -1811,5 +1816,280 @@ function DataTab() {
         </AlertDialogContent>
       </AlertDialog>
     </motion.div>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   Memory Tab — Dream 记忆系统查看
+   ═══════════════════════════════════════════ */
+const MEMORY_CATEGORY_LABELS: Record<string, string> = {
+  mood: '情绪',
+  focus: '关注',
+  relationship: '关系',
+  other: '其他',
+}
+
+function MemoryTab() {
+  const utils = trpc.useUtils()
+  const { data: settings } = trpc.aiSettings.get.useQuery()
+  const { data: profile, isLoading: profileLoading } = trpc.memories.getProfile.useQuery()
+  const { data: shortTermMemories, isLoading: memLoading } = trpc.memories.listShortTerm.useQuery()
+
+  const updateDiaryMutation = trpc.aiSettings.updateDiary.useMutation({
+    onSuccess: () => utils.aiSettings.get.invalidate(),
+  })
+  const deleteMemMutation = trpc.memories.deleteShortTerm.useMutation({
+    onSuccess: () => utils.memories.listShortTerm.invalidate(),
+  })
+  const resetProfileMutation = trpc.memories.resetProfile.useMutation({
+    onSuccess: () => utils.memories.getProfile.invalidate(),
+  })
+
+  const enableDream = settings?.enableDream ?? true
+
+  const hasProfile = profile && (profile.summary || profile.persona || profile.relationships || profile.emotionalTone || profile.languageStyle)
+  const memories = shortTermMemories ?? []
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+
+  return (
+    <motion.div
+      className="flex flex-col gap-4 p-4"
+      variants={cardStagger}
+      initial="hidden"
+      animate="visible"
+    >
+      {/* Dream 开关 */}
+      <motion.div variants={cardItem}>
+        <Card
+          className="rounded-2xl border-0 shadow-none"
+          style={{ backgroundColor: 'var(--bg-surface)' }}
+        >
+          <CardHeader className="px-4 pt-4 pb-0">
+            <CardTitle
+              className="text-base font-medium flex items-center gap-2"
+              style={{ fontFamily: "'DM Sans', sans-serif", color: 'var(--text-primary)' }}
+            >
+              <Brain size={16} style={{ color: 'var(--accent)' }} />
+              Dream 记忆
+            </CardTitle>
+            <CardDescription style={{ color: 'var(--text-tertiary)' }} className="text-xs">
+              日记生成后，AI 会自动提炼对你的抽象理解（人格、关系、情绪、语风），用于让后续日记更有连续性
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                启用 Dream
+              </span>
+              <Switch
+                checked={enableDream}
+                onCheckedChange={(checked) =>
+                  updateDiaryMutation.mutate({ enableDream: checked })
+                }
+                disabled={updateDiaryMutation.isPending}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* 长期画像 */}
+      <motion.div variants={cardItem}>
+        <Card
+          className="rounded-2xl border-0 shadow-none"
+          style={{ backgroundColor: 'var(--bg-surface)' }}
+        >
+          <CardHeader className="px-4 pt-4 pb-0">
+            <CardTitle
+              className="text-base font-medium"
+              style={{ fontFamily: "'DM Sans', sans-serif", color: 'var(--text-primary)' }}
+            >
+              AI 对你的理解
+            </CardTitle>
+            <CardDescription style={{ color: 'var(--text-tertiary)' }} className="text-xs">
+              长期画像，每次日记生成后增量更新
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 p-4">
+            {profileLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--accent)' }} />
+              </div>
+            ) : hasProfile ? (
+              <>
+                {profile?.summary && (
+                  <p
+                    className="text-sm leading-relaxed"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {profile.summary}
+                  </p>
+                )}
+                <div className="flex flex-col gap-2 mt-1">
+                  {profile?.persona && (
+                    <MemoryField label="人格" value={profile.persona} />
+                  )}
+                  {profile?.relationships && (
+                    <MemoryField label="关系" value={profile.relationships} />
+                  )}
+                  {profile?.emotionalTone && (
+                    <MemoryField label="情绪基调" value={profile.emotionalTone} />
+                  )}
+                  {profile?.languageStyle && (
+                    <MemoryField label="语风" value={profile.languageStyle} />
+                  )}
+                </div>
+                {profile?.updatedAt && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                    上次更新：{new Date(profile.updatedAt).toLocaleString('zh-CN')}
+                    {typeof profile.version === 'number' ? ` · 第 ${profile.version} 次提炼` : ''}
+                  </p>
+                )}
+                {hasProfile && (
+                  <AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="w-full gap-2 rounded-lg mt-2"
+                        style={{ color: 'var(--error)' }}
+                      >
+                        <RotateCcw size={14} />
+                        重置画像
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent
+                      className="rounded-xl border-0"
+                      style={{ backgroundColor: 'var(--bg-elevated)' }}
+                    >
+                      <AlertDialogHeader>
+                        <AlertDialogTitle style={{ color: 'var(--text-primary)' }}>
+                          重置 AI 画像
+                        </AlertDialogTitle>
+                        <AlertDialogDescription style={{ color: 'var(--text-secondary)' }}>
+                          确定要清空 AI 对你的长期画像吗？短期记忆不受影响。下次生成日记后会重新提炼。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel
+                          className="rounded-lg border-0"
+                          style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)' }}
+                        >
+                          取消
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => resetProfileMutation.mutate()}
+                          disabled={resetProfileMutation.isPending}
+                          className="rounded-lg"
+                          style={{ backgroundColor: 'var(--error)', color: '#fff' }}
+                        >
+                          {resetProfileMutation.isPending ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : '重置'}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </>
+            ) : (
+              <p className="text-sm py-4 text-center" style={{ color: 'var(--text-tertiary)' }}>
+                AI 还不了解你。生成几篇日记后会自动提炼出画像。
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* 短期记忆 */}
+      <motion.div variants={cardItem}>
+        <Card
+          className="rounded-2xl border-0 shadow-none"
+          style={{ backgroundColor: 'var(--bg-surface)' }}
+        >
+          <CardHeader className="px-4 pt-4 pb-0">
+            <CardTitle
+              className="text-base font-medium"
+              style={{ fontFamily: "'DM Sans', sans-serif", color: 'var(--text-primary)' }}
+            >
+              近期状态
+            </CardTitle>
+            <CardDescription style={{ color: 'var(--text-tertiary)' }} className="text-xs">
+              抽象的短期记忆，14 天后自动归档
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 p-4">
+            {memLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--accent)' }} />
+              </div>
+            ) : memories.length > 0 ? (
+              memories.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-start gap-2 rounded-xl px-3 py-2.5"
+                  style={{ backgroundColor: 'var(--bg-elevated)' }}
+                >
+                  <span
+                    className="mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium shrink-0"
+                    style={{
+                      backgroundColor: 'var(--accent-soft)',
+                      color: 'var(--accent)',
+                    }}
+                  >
+                    {MEMORY_CATEGORY_LABELS[m.category] ?? m.category}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                      {m.content}
+                    </p>
+                    <div className="flex items-center gap-1 mt-1">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <span
+                          key={i}
+                          className="inline-block h-1.5 w-1.5 rounded-full"
+                          style={{
+                            backgroundColor:
+                              i < (m.importance ?? 3)
+                                ? 'var(--accent)'
+                                : 'var(--divider)',
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 rounded-md shrink-0"
+                    style={{ color: 'var(--text-tertiary)' }}
+                    onClick={() => deleteMemMutation.mutate({ id: m.id })}
+                    disabled={deleteMemMutation.isPending}
+                  >
+                    <X size={14} />
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm py-4 text-center" style={{ color: 'var(--text-tertiary)' }}>
+                还没有近期状态记忆。
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function MemoryField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
+        {label}
+      </span>
+      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+        {value}
+      </span>
+    </div>
   )
 }

@@ -36,6 +36,7 @@ export const aiSettingsRouter = createRouter({
         diaryApiBaseUrl: null,
         diaryPromptTemplate: null,
         stylePrompts: null,
+        enableDream: true,
         createdAt: null,
         updatedAt: null,
       };
@@ -88,6 +89,7 @@ export const aiSettingsRouter = createRouter({
         diaryLength: z.string().max(20).optional(),
         diaryPromptTemplate: z.string().optional(),
         stylePrompts: z.string().optional(),
+        enableDream: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

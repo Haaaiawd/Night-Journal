@@ -3,6 +3,7 @@ import { createRouter, publicQuery } from "./middleware";
 import { entriesRouter } from "./routers/entries";
 import { diariesRouter } from "./routers/diaries";
 import { aiSettingsRouter } from "./routers/aiSettings";
+import { memoriesRouter } from "./routers/memories";
 import { uploadRouter } from "./routers/upload";
 
 export const appRouter = createRouter({
@@ -11,6 +12,7 @@ export const appRouter = createRouter({
   entries: entriesRouter,
   diaries: diariesRouter,
   aiSettings: aiSettingsRouter,
+  memories: memoriesRouter,
   upload: uploadRouter,
 });
 
