@@ -16,6 +16,8 @@
 3. **读取 `.anws/v{N}/05A_TASKS.md` 与 `05B_VERIFICATION_PLAN.md`** → 了解执行与验证待办
 4. **开始工作**
 
+> **提 PR 前必读 `CONTRIBUTING.md`** — 分支命名、commit 格式、PR 模板、测试要求的完整规范都在里面。不按规范提的 PR 会被打回。
+
 ---
 
 ## 地图 (领地感知)
@@ -81,7 +83,7 @@
 
 - **最近一次更新**: 2026 — 新增账号密码登录、Docker 一键部署（自动迁移）、Dream 记忆机制
 - **认证**: 账号密码（bcrypt cost=12）+ Kimi OAuth 2.0 并行，统一 JWT session
-- **数据库迁移**: 自动 — 容器启动时由 `entrypoint.sh` 执行 `drizzle-kit migrate`
+- **数据库迁移**: 自动 — 容器启动时由 `entrypoint.sh` 执行 `drizzle-kit push`（schema diff，幂等可重跑；不要手动跑 `migrate`，生成的 SQL 文件缺 `IF NOT EXISTS` 会撞表）
 - **部署方式**: `docker compose up -d --build` 即完成全部，无需手动建表
 - **Dream 记忆机制**: 日记生成后异步提炼用户画像（人格/关系/情绪/语风）+ 短期记忆（14天衰减），注入后续日记 prompt 提供连续性。Settings "记忆" tab 可只读+删除。`aiSettings.enableDream` 开关控制
 - **测试状态**: 68 个单元测试全部通过（vitest），覆盖账号密码注册/登录、OAuth、JWT、env、diaries、memories 路由、Dream 响应解析
@@ -171,11 +173,11 @@ Night-Journal/
 │       └── trpc.ts         # tRPC client 配置
 ├── db/
 │   ├── schema.ts           # Drizzle schema（users/entries/diaries/aiSettings）
-│   └── migrations/         # SQL 迁移文件（容器启动时自动执行）
+│   └── migrations/         # 迁移元数据（snapshot/journal 必须提交；SQL 文件被 gitignore，push 不读）
 ├── contracts/
 │   ├── constants.ts        # 路径常量 + OAuth/Session 配置
 │   └── errors.ts           # 错误码
-├── entrypoint.sh           # 容器启动脚本：drizzle-kit migrate → node dist/boot.js
+├── entrypoint.sh           # 容器启动脚本：drizzle-kit push → node dist/boot.js
 ├── Dockerfile              # 多阶段构建：builder → runner (node:22-alpine)
 ├── docker-compose.yml      # app + mysql:8.4，含 healthcheck
 └── .env.example            # 环境变量模板
