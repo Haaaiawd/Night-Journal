@@ -5,6 +5,7 @@ import { findAiSettingsByUserId } from "../queries/ai-settings";
 import { findDiaryByDate, updateDiary } from "../queries/diaries";
 import { findProfileByUserId, findActiveShortTermMemories } from "../queries/memories";
 import { dreamProfile } from "./dream";
+import { DEFAULT_DIARY_PROMPT, DEFAULT_STYLE_PROMPTS } from "@contracts/prompts";
 import type { ShortTermMemory } from "@db/schema";
 
 // In-process guard: prevents the same (userId, date) Dream pass from
@@ -13,52 +14,6 @@ import type { ShortTermMemory } from "@db/schema";
 // the .finally() so a failed Dream pass can be retried on the next
 // diary generation.
 const dreamInFlight = new Set<string>();
-
-const DEFAULT_DIARY_PROMPT = `你是一个私人日记整理助手。你的任务不是写总结、不是写任务清单、不是写公众号文章，而是根据用户一天中零散留下的文字、情绪、经历和图片概要，整理成一篇自然、有情绪、有生活质感的日记。
-
-请遵守：
-1. 不要虚构重大事件
-2. 可以基于用户表达进行轻微文学化整理，但不能改变事实
-3. 不要进行心理诊断
-4. 不要用"你应该""你必须"说教
-5. 不要写成鸡汤
-6. 不要写成公众号文章
-7. 不要写成工作总结
-8. 不要过度积极
-9. 不要过度美化痛苦
-10. 不要制造不存在的人际关系
-11. 信息少时就写短一点，不要硬凑
-12. 保留用户原本的语气、混乱感和情绪纹理
-13. 日记要像用户自己写的，但更完整、更清晰、更有流动感
-14. 图片概要可以融入正文，但不要在正文中插入图片链接
-15. 正文结尾可以留一句轻微的余味，但不要鸡汤
-
-日记长度：
-- 短：300到500字
-- 中：700到1000字
-- 长：1200到1800字
-
-输出 JSON：
-{
-  "title": "日记标题",
-  "summary": "一句话摘要",
-  "content": "完整日记正文"
-}`;
-
-const DEFAULT_STYLE_PROMPTS: Record<string, string> = {
-  温柔真实:
-    "像朋友间的轻声倾诉，语气温柔但真实。不刻意渲染情绪，让日常细节自然流露。多用短句，偶尔停下来，像在想什么事情。",
-  文学感:
-    "用细腻的文学化语言，可以有比喻和意象。句式错落有致，注重画面感和节奏感。允许适度的文学化加工，但不能改变事实。",
-  克制冷静:
-    "简洁、客观、观察者的视角。少用形容词，让事实本身说话。情绪藏在留白和沉默里，不直接说出来。",
-  情绪充沛:
-    "允许情感饱满地流露，可以直抒胸臆。不用克制，但不要无病呻吟。情绪是真实的，就让它出来。",
-  像写给未来的自己:
-    "以时间胶囊的口吻叙述，像在跟未来的自己对话。可以带有回顾和期许，但不要说教。把今天留给未来的自己去读。",
-  清醒但不冷漠:
-    "理性中带着温度。有观察有思考，但不冷硬。保持对生活的善意，看清楚了依然温柔。",
-};
 
 function getStylePrompt(style: string, stylePromptsJson?: string | null): string {
   if (stylePromptsJson) {
@@ -72,7 +27,15 @@ function getStylePrompt(style: string, stylePromptsJson?: string | null): string
   return DEFAULT_STYLE_PROMPTS[style] ?? "";
 }
 
-function buildDiaryUserMessage(opts: {
+type ShortTermMemoryInput = Pick<ShortTermMemory, "content" | "category" | "importance">;
+
+interface DiaryMemory {
+  profileSummary: string | null;
+  languageStyle: string | null;
+  shortTermMemories: ShortTermMemoryInput[];
+}
+
+interface DiaryContext {
   date: string;
   language: string;
   style: string;
@@ -84,15 +47,16 @@ function buildDiaryUserMessage(opts: {
     createdAt: Date;
     attachments?: Array<{ visionSummary: string | null }>;
   }>;
-  memory?: {
-    profileSummary: string | null;
-    languageStyle: string | null;
-    shortTermMemories: ShortTermMemory[];
-  } | null;
-}): string {
-  const { date, language, style, length, stylePrompt, fragments, memory } = opts;
+  memory?: DiaryMemory | null;
+}
 
-  const fragmentDescriptions = fragments
+/**
+ * Render fragment descriptions for the prompt.
+ * Each fragment includes its time, optional mood, content text, and any
+ * image summaries produced by the vision model.
+ */
+function renderFragments(fragments: DiaryContext["fragments"]): string {
+  return fragments
     .map((f, i) => {
       const time = format(new Date(f.createdAt), "HH:mm");
       const mood = f.moodLabel ? ` [${f.moodLabel}]` : "";
@@ -104,33 +68,78 @@ function buildDiaryUserMessage(opts: {
       return `${i + 1}. ${time}${mood}\n${f.contentText}${imageSummaries ? "\n" + imageSummaries : ""}`;
     })
     .join("\n\n");
+}
 
-  const allImageSummaries = fragments
+/**
+ * Render the consolidated image summary block.
+ */
+function renderImageSummaries(fragments: DiaryContext["fragments"]): string {
+  const summaries = fragments
     .flatMap((f) => f.attachments?.filter((a) => a.visionSummary).map((a) => a.visionSummary) ?? [])
     .filter((s): s is string => !!s);
+  return summaries.length > 0 ? summaries.join("\n") : "无";
+}
 
-  // Dream memory block — injected only when a profile exists. The wording
-  // explicitly tells the model NOT to restate these facts; they are
-  // background understanding for continuity, not material to narrate.
-  let memoryBlock = "";
-  if (memory && (memory.profileSummary || memory.shortTermMemories.length > 0)) {
-    const lines: string[] = [];
-    if (memory.profileSummary) {
-      lines.push(`对这个用户的理解：${memory.profileSummary}`);
-    }
-    if (memory.languageStyle) {
-      lines.push(`语风参考：${memory.languageStyle}`);
-    }
-    if (memory.shortTermMemories.length > 0) {
-      const memLines = memory.shortTermMemories
-        .map((m) => `- [${m.category}] ${m.content}`)
-        .join("\n");
-      lines.push(`近期状态：\n${memLines}`);
-    }
-    memoryBlock = `\n你对这个用户的了解（用于保持日记的连续性，不要直接复述或罗列，自然融入即可）：\n${lines.join("\n")}\n`;
+/**
+ * Render the Dream memory block. Injected only when a profile or short-term
+ * memories exist. The wording explicitly tells the model NOT to restate these
+ * facts; they are background understanding for continuity, not material to
+ * narrate.
+ */
+function renderMemoryBlock(memory: DiaryMemory | null | undefined): string {
+  if (!memory || (!memory.profileSummary && memory.shortTermMemories.length === 0)) {
+    return "";
   }
+  const lines: string[] = [];
+  if (memory.profileSummary) {
+    lines.push(`对这个用户的理解：${memory.profileSummary}`);
+  }
+  if (memory.languageStyle) {
+    lines.push(`语风参考：${memory.languageStyle}`);
+  }
+  if (memory.shortTermMemories.length > 0) {
+    const memLines = memory.shortTermMemories.map((m) => `- [${m.category}] ${m.content}`).join("\n");
+    lines.push(`近期状态：\n${memLines}`);
+  }
+  return `\n你对这个用户的了解（用于保持日记的连续性，不要直接复述或罗列，自然融入即可）：\n${lines.join("\n")}\n`;
+}
 
-  return `日期：${date}
+/**
+ * Known placeholders for the diary user-message template.
+ *
+ * Keep this list in sync with the documentation in `contracts/prompts.ts`
+ * and the hints shown in the Settings UI.
+ */
+export const DIARY_PLACEHOLDERS = [
+  "{{date}}",
+  "{{language}}",
+  "{{style}}",
+  "{{stylePrompt}}",
+  "{{length}}",
+  "{{fragments}}",
+  "{{imageSummaries}}",
+  "{{memoryBlock}}",
+] as const;
+
+/**
+ * Build the user message sent to the diary model.
+ *
+ * If the configured prompt template contains any known placeholders, they are
+ * replaced with the corresponding rendered content. This lets power users
+ * rearrange or omit parts of the prompt from Settings.
+ *
+ * If the template contains no known placeholders (legacy custom prompts or
+ * the old hard-coded format), the rendered content is appended after the
+ * template as a fallback so existing user configurations keep working.
+ */
+export function buildDiaryUserMessage(context: DiaryContext, template: string): string {
+  const { date, language, style, length, stylePrompt, fragments, memory } = context;
+
+  const fragmentDescriptions = renderFragments(fragments);
+  const imageSummaries = renderImageSummaries(fragments);
+  const memoryBlock = renderMemoryBlock(memory);
+
+  const legacyContentBlock = `日期：${date}
 语言：${language}
 日记风格：${style}
 风格说明：${stylePrompt}
@@ -140,9 +149,26 @@ ${memoryBlock}
 ${fragmentDescriptions}
 
 图片摘要汇总：
-${allImageSummaries.length > 0 ? allImageSummaries.join("\n") : "无"}
+${imageSummaries}
 
 请根据以上素材生成日记。`;
+
+  const hasPlaceholder = DIARY_PLACEHOLDERS.some((p) => template.includes(p));
+  if (!hasPlaceholder) {
+    return `${template}\n\n${legacyContentBlock}`;
+  }
+
+  const values: Record<string, string> = {
+    date,
+    language,
+    style,
+    stylePrompt,
+    length,
+    fragments: fragmentDescriptions,
+    imageSummaries,
+    memoryBlock,
+  };
+  return DIARY_PLACEHOLDERS.reduce((acc, key) => acc.replaceAll(key, values[key.slice(2, -2)] ?? ""), template);
 }
 
 function parseDiaryResponse(
@@ -193,11 +219,7 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
     // Load Dream memory (profile + active short-term memories) for prompt
     // injection. Skipped when the user has disabled Dream or no profile
     // exists yet — both resolve to a null memory block.
-    let memory: {
-      profileSummary: string | null;
-      languageStyle: string | null;
-      shortTermMemories: ShortTermMemory[];
-    } | null = null;
+    let memory: DiaryMemory | null = null;
     if (settings.enableDream !== false) {
       const [profile, shortTermMemories] = await Promise.all([
         findProfileByUserId(userId),
@@ -212,15 +234,18 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
       }
     }
 
-    const userMessage = buildDiaryUserMessage({
-      date,
-      language,
-      style,
-      length,
-      stylePrompt,
-      fragments: entries,
-      memory,
-    });
+    const userMessage = buildDiaryUserMessage(
+      {
+        date,
+        language,
+        style,
+        length,
+        stylePrompt,
+        fragments: entries,
+        memory,
+      },
+      promptTemplate,
+    );
 
     const content = await callChatModel({
       apiKey: settings.diaryApiKey,

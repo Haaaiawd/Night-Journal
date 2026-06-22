@@ -12,6 +12,7 @@ import {
 import { findAiSettingsByUserId } from "../queries/ai-settings";
 import { callVisionModel } from "../lib/openai";
 import { readFileAsBase64 } from "../lib/upload";
+import { DEFAULT_VISION_PROMPT } from "@contracts/prompts";
 
 export const entriesRouter = createRouter({
   // ── queries ──────────────────────────────────────────────────────
@@ -142,8 +143,7 @@ async function triggerVisionAnalysis(
   // configured === true guarantees non-null here
   const apiKey = visionApiKey as string;
   const apiBaseUrl = visionApiBaseUrl as string;
-  const prompt = settings!.visionPromptTemplate ||
-    "请描述这张图片的内容，并结合以下文字上下文生成适合日记写作的图片素材描述。";
+  const prompt = settings!.visionPromptTemplate || DEFAULT_VISION_PROMPT;
 
   for (const dbAtt of dbAttachments) {
     try {
@@ -158,7 +158,7 @@ async function triggerVisionAnalysis(
       const mimeType = dbAtt.fileType || "image/jpeg";
       const fullPrompt = `${prompt}\n\n关联文字: ${contextText}\n创建时间: ${new Date().toISOString()}`;
 
-      const result = await callVisionModel({
+      const rawResult = await callVisionModel({
         apiKey,
         baseUrl: apiBaseUrl,
         model: settings!.visionModel ?? undefined,
@@ -167,9 +167,15 @@ async function triggerVisionAnalysis(
         imageMimeType: mimeType,
       });
 
+      // Extract the usable diary material from JSON if the model followed the
+      // default template. If the user supplied a custom text-only prompt or the
+      // model misbehaved, fall back to the raw text so the diary generator still
+      // has something to work with.
+      const usableMaterial = extractUsableDiaryMaterial(rawResult) ?? rawResult;
+
       await updateAttachmentVision(dbAtt.id, {
         visionStatus: "completed",
-        visionSummary: result,
+        visionSummary: usableMaterial,
         visionModelUsed: settings.visionModel ?? "default",
         visionContextSnapshot: contextText,
       });
@@ -180,4 +186,25 @@ async function triggerVisionAnalysis(
       });
     }
   }
+}
+
+/**
+ * Parse a vision-model response and return the `usable_diary_material` field
+ * when present. Returns null when the response is not JSON, missing the field,
+ * or the field is empty — callers should fall back to the raw response.
+ */
+export function extractUsableDiaryMaterial(raw: string): string | null {
+  if (!raw || !raw.trim()) return null;
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const jsonStr = jsonMatch ? jsonMatch[0] : raw;
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+    const usable = parsed.usable_diary_material;
+    if (typeof usable === "string" && usable.trim()) {
+      return usable.trim();
+    }
+  } catch {
+    // ignore: not JSON, fall back to raw text
+  }
+  return null;
 }
