@@ -22,6 +22,27 @@
       "when": 1781937855722,
       "tag": "0002_abandoned_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1782100169790,
+      "tag": "0003_bouncy_carlie_cooper",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1782101102642,
+      "tag": "0004_aberrant_changeling",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1782102121807,
+      "tag": "0005_clumsy_sharon_carter",
+      "breakpoints": true
     }
   ]
 }

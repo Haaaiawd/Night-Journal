@@ -67,6 +67,7 @@ export async function updateDiarySettings(
     diaryLength?: string;
     diaryPromptTemplate?: string;
     stylePrompts?: string;
+    enableDream?: boolean;
   },
 ) {
   return upsertAiSettings(userId, data);

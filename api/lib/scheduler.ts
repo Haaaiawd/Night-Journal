@@ -4,6 +4,7 @@ import { findAiSettingsByUserId } from "../queries/ai-settings";
 import { findDiaryByDate, createDiary } from "../queries/diaries";
 import { findEntriesByDate } from "../queries/entries";
 import { generateDiaryForDate } from "../services/diary";
+import { archiveExpiredMemories } from "../queries/memories";
 
 const PENDING_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -11,6 +12,10 @@ const PENDING_TIMEOUT_MS = 10 * 60 * 1000;
 // in one server instance. If the server restarts, the guard is lost, but the
 // diary row status prevents duplicate work.
 const lastProcessedDate = new Map<number, string>();
+
+// In-memory guard so the memory-decay sweep runs at most once per day per
+// server instance. Reset on restart, which is fine — archiving is idempotent.
+let lastMemoryDecayRun: string | null = null;
 
 function getLocalDateTimeParts(timezone: string): { date: string; time: string; yesterday: string } {
   const localString = new Date().toLocaleString("sv-SE", { timeZone: timezone, hour12: false });
@@ -97,6 +102,27 @@ export function startScheduler(intervalMinutes = 1) {
           }),
         ),
       );
+
+      // Once-per-day memory decay sweep across all users. Uses today's
+      // date as a rough marker — exact timezone doesn't matter since
+      // deletion is idempotent and a few hours of skew is irrelevant for
+      // a 14-day decay window.
+      //
+      // The guard is set AFTER the sweep succeeds, so a failure (e.g. DB
+      // connection error) allows retry on the next tick instead of
+      // blocking until tomorrow.
+      const todayMarker = format(new Date(), "yyyy-MM-dd");
+      if (lastMemoryDecayRun !== todayMarker) {
+        try {
+          const deleted = await archiveExpiredMemories();
+          if (deleted > 0) {
+            console.log(`[scheduler] deleted ${deleted} expired short-term memories`);
+          }
+          lastMemoryDecayRun = todayMarker;
+        } catch (err) {
+          console.error("[scheduler] memory decay sweep failed:", err);
+        }
+      }
     } catch (err) {
       console.error("[scheduler] tick failed:", err);
     }

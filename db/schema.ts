@@ -8,6 +8,7 @@ import {
   timestamp,
   date,
   boolean,
+  uniqueIndex,
 } from "drizzle-orm/mysql-core";
 
 // ─── Users (auth feature) ──────────────────────────────────────────
@@ -144,6 +145,10 @@ export const aiSettings = mysqlTable("ai_settings", {
   diaryPromptTemplate: text("diary_prompt_template"),
   // Per-style editable prompt snippets, stored as JSON: { "温柔真实": "...", "文学感": "..." }
   stylePrompts: text("style_prompts"),
+  // Dream memory: when true, diary generation triggers an async profile-update
+  // pass that maintains a long-term user profile + short-term memories, which
+  // are injected into subsequent diary prompts for continuity.
+  enableDream: boolean("enable_dream").default(true).notNull(),
   // General
   timezone: varchar("timezone", { length: 50 }).default("Asia/Shanghai"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -175,3 +180,69 @@ export const modelPresets = mysqlTable("model_presets", {
 
 export type ModelPreset = typeof modelPresets.$inferSelect;
 export type InsertModelPreset = typeof modelPresets.$inferInsert;
+
+// ─── User Profiles — long-term abstract understanding of the user ──
+//
+// Dream mechanism: one row per user. Maintained incrementally by the Dream
+// pass (api/services/dream.ts) after each diary generation. Stores abstract
+// traits only — persona, relationships, emotional tone, language style —
+// never concrete events. Injected into diary prompts for continuity.
+
+export const userProfiles = mysqlTable("user_profiles", {
+  id: serial("id").primaryKey(),
+  userId: bigint("user_id", { mode: "number", unsigned: true }).notNull().unique(),
+  persona: text("persona"),
+  relationships: text("relationships"),
+  emotionalTone: text("emotional_tone"),
+  languageStyle: text("language_style"),
+  summary: text("summary"),
+  version: bigint("version", { mode: "number", unsigned: true }).default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type UserProfile = typeof userProfiles.$inferSelect;
+export type InsertUserProfile = typeof userProfiles.$inferInsert;
+
+// ─── Short-term Memories — abstract recent state, 14-day decay ──────
+//
+// Multi-row per user. Abstract descriptions of recent state (e.g. "recently
+// under deadline pressure"), NOT concrete events. Decays after 14 days;
+// deleted when decayAt passes. Referenced memories refresh
+// lastReferencedAt to stay relevant longer.
+//
+// content is varchar(200) (not TEXT) so it can participate in a unique
+// index — MySQL forbids indexing full TEXT columns (error 1170). The 200
+// char cap is enforced in parseDreamResponse (MAX_MEMORY_CONTENT_LEN).
+
+export const shortTermMemories = mysqlTable(
+  "short_term_memories",
+  {
+    id: serial("id").primaryKey(),
+    userId: bigint("user_id", { mode: "number", unsigned: true }).notNull(),
+    content: varchar("content", { length: 200 }).notNull(),
+    category: mysqlEnum("category", ["mood", "focus", "relationship", "other"]).default("other").notNull(),
+    importance: bigint("importance", { mode: "number", unsigned: true }).default(3).notNull(),
+    firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+    lastReferencedAt: timestamp("last_referenced_at").defaultNow().notNull(),
+    decayAt: timestamp("decay_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    // Ensures mergeShortTermMemories can use INSERT ... ON DUPLICATE KEY
+    // UPDATE safely: at most one row per (user_id, content). Expired
+    // memories are hard-deleted (not soft-archived), so a memory can be
+    // re-created fresh after its previous incarnation expired.
+    contentUnique: uniqueIndex("content_unique").on(table.userId, table.content),
+  }),
+);
+
+export type ShortTermMemory = typeof shortTermMemories.$inferSelect;
+export type InsertShortTermMemory = typeof shortTermMemories.$inferInsert;

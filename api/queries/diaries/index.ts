@@ -49,6 +49,34 @@ export async function findDiaryById(userId: number, diaryId: number) {
   return rows.at(0);
 }
 
+/**
+ * Recently generated diaries (newest first), used as Dream input material.
+ * Only includes successfully generated diaries with content — pending/failed
+ * rows carry no signal for profile synthesis.
+ */
+export async function findRecentGeneratedDiaries(userId: number, days: number) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  return getDb()
+    .select({
+      diaryDate: diaries.diaryDate,
+      title: diaries.title,
+      summary: diaries.summary,
+      content: diaries.content,
+    })
+    .from(diaries)
+    .where(
+      and(
+        eq(diaries.userId, userId),
+        gte(diaries.diaryDate, since),
+        eq(diaries.generationStatus, "generated"),
+      ),
+    )
+    .orderBy(desc(diaries.diaryDate))
+    .limit(days);
+}
+
 export async function createDiary(
   userId: number,
   data: {
