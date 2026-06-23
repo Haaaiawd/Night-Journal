@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { format } from "date-fns";
 import { createRouter, authedQuery } from "../middleware";
 import {
   findProfileByUserId,
@@ -54,7 +53,8 @@ export const memoriesRouter = createRouter({
       return { success: false, message: "Dream 记忆未启用" };
     }
 
-    const todayDate = format(new Date(), "yyyy-MM-dd");
+    const tz = settings.timezone || "Asia/Shanghai";
+    const todayDate = new Date().toLocaleString("sv-SE", { timeZone: tz, hour12: false }).split(" ")[0];
     const updated = await dreamProfile(ctx.user.id, todayDate);
     return {
       success: updated,
