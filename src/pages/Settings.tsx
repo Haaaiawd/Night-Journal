@@ -343,13 +343,13 @@ export default function SettingsPage() {
       >
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
           <TabsList
-            className="flex w-full justify-start gap-0 rounded-none bg-transparent p-0 h-12"
+            className="flex w-full justify-start gap-0 rounded-none bg-transparent p-0 h-12 overflow-x-auto no-scrollbar"
           >
             {TABS.map((tab) => (
               <TabsTrigger
                 key={tab.id}
                 value={tab.id}
-                className="relative flex-1 rounded-none border-0 border-b-2 border-transparent bg-transparent px-1 py-0 text-[12px] font-medium data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="relative flex-shrink-0 min-w-[72px] rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-0 text-[12px] font-medium data-[state=active]:bg-transparent data-[state=active]:shadow-none"
                 style={{
                   color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-tertiary)',
                   transition: 'color 200ms ease',
@@ -891,7 +891,6 @@ function WriterModelTab() {
   const [style, setStyle] = useState('温柔真实')
   const [length, setLength] = useState('中')
   const [genTime, setGenTime] = useState('02:00')
-  const [userPromptTemplate, setUserPromptTemplate] = useState(DEFAULT_DIARY_USER_TEMPLATE)
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_DIARY_SYSTEM_PROMPT)
   const [stylePromptsMap, setStylePromptsMap] = useState<Record<string, string>>(DEFAULT_STYLE_PROMPTS)
   const [showKey, setShowKey] = useState(false)
@@ -908,9 +907,8 @@ function WriterModelTab() {
       if (settings.diaryLength) setLength(settings.diaryLength)
       if (settings.diaryGenerationTime) setGenTime(settings.diaryGenerationTime)
       if (settings.diaryPromptTemplate) {
-        const { system, user } = splitDiaryPrompt(settings.diaryPromptTemplate)
-        setSystemPrompt(system ?? DEFAULT_DIARY_SYSTEM_PROMPT)
-        setUserPromptTemplate(user || DEFAULT_DIARY_USER_TEMPLATE)
+        const { system } = splitDiaryPrompt(settings.diaryPromptTemplate)
+        setSystemPrompt(system || DEFAULT_DIARY_SYSTEM_PROMPT)
       }
       if (settings.stylePrompts) {
         try {
@@ -943,14 +941,14 @@ function WriterModelTab() {
       diaryStyle: style,
       diaryLength: length,
       diaryGenerationTime: genTime,
-      diaryPromptTemplate: `${systemPrompt}\n\n---\n\n${userPromptTemplate}` || undefined,
+      diaryPromptTemplate: `${systemPrompt.trim() || DEFAULT_DIARY_SYSTEM_PROMPT}\n\n---\n\n${DEFAULT_DIARY_USER_TEMPLATE}`,
       stylePrompts: JSON.stringify(stylePromptsMap),
     }
     if (apiKey.trim()) {
       payload.diaryApiKey = apiKey.trim()
     }
     updateDiary.mutate(payload)
-  }, [apiBase, apiKey, modelName, language, style, length, genTime, systemPrompt, userPromptTemplate, stylePromptsMap, updateDiary])
+  }, [apiBase, apiKey, modelName, language, style, length, genTime, systemPrompt, stylePromptsMap, updateDiary])
 
   const handleTest = useCallback(async () => {
     const keyToTest = apiKey.trim()
@@ -976,7 +974,6 @@ function WriterModelTab() {
 
   const handleResetPrompt = () => {
     setSystemPrompt(DEFAULT_DIARY_SYSTEM_PROMPT)
-    setUserPromptTemplate(DEFAULT_DIARY_USER_TEMPLATE)
   }
 
   const handleStylePromptChange = useCallback((styleKey: string, value: string) => {
@@ -1409,7 +1406,7 @@ function WriterModelTab() {
               <Textarea
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
-                className="min-h-[180px] resize-y rounded-xl border font-mono text-sm leading-relaxed"
+                className="min-h-[300px] resize-y rounded-xl border font-mono text-sm leading-relaxed"
                 style={{
                   backgroundColor: 'var(--bg-elevated)',
                   borderColor: 'var(--divider)',
@@ -1419,26 +1416,8 @@ function WriterModelTab() {
                 aria-label="日记系统 Prompt"
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label className="text-xs" style={{ color: 'var(--text-secondary)' }}>用户提示词模板（数据占位符会被替换）</Label>
-              <Textarea
-                value={userPromptTemplate}
-                onChange={(e) => setUserPromptTemplate(e.target.value)}
-                className="min-h-[180px] resize-y rounded-xl border font-mono text-sm leading-relaxed"
-                style={{
-                  backgroundColor: 'var(--bg-elevated)',
-                  borderColor: 'var(--divider)',
-                  color: 'var(--text-primary)',
-                  fontFamily: "'DM Sans', monospace",
-                }}
-                aria-label="日记用户 Prompt 模板"
-              />
-            </div>
             <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              可用占位符（用户提示词中会被自动替换）：{' '}
-              <code className="rounded px-1 py-0.5 font-mono text-[11px]" style={{ backgroundColor: 'var(--bg-elevated)' }}>
-                {'{{date}} {{language}} {{style}} {{stylePrompt}} {{length}} {{fragments}} {{imageSummaries}} {{memoryBlock}}'}
-              </code>
+              只编辑系统提示词，数据模板由系统固定提供。
             </p>
             <div className="flex items-center justify-between">
               <Button
