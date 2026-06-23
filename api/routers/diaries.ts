@@ -193,6 +193,7 @@ export const diariesRouter = createRouter({
       // Update diary to pending status for regeneration
       const updated = await updateDiary(ctx.user.id, diary.id, {
         generationStatus: "pending",
+        generationError: null,
         manuallyEdited: false,
       });
 

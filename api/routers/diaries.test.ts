@@ -29,6 +29,7 @@ vi.mock("../queries/diaries", () => ({
   updateDiaryContent: vi.fn(),
   createDiaryVersion: vi.fn(),
   findVersionsByDiaryId: vi.fn(),
+  findRecentDiaryGenerationLogs: vi.fn(),
   deleteDiary: vi.fn(),
 }));
 
@@ -45,7 +46,11 @@ vi.mock("../lib/env", () => ({
   },
 }));
 
-import { findDiaryById, deleteDiary } from "../queries/diaries";
+import {
+  findDiaryById,
+  deleteDiary,
+  findRecentDiaryGenerationLogs,
+} from "../queries/diaries";
 import { diariesRouter } from "./diaries";
 import type { TrpcContext } from "../context";
 
@@ -164,6 +169,44 @@ describe("diaries.delete", () => {
 
     await expect(caller.delete({ id: 42 })).rejects.toThrow("DB connection lost");
     expect(deleteDiary).not.toHaveBeenCalled();
+  });
+});
+
+describe("diaries.generationLogs", () => {
+  const user = makeUser(1);
+  const caller = makeCaller(makeCtx(user));
+
+  it("returns recent generation logs for the authenticated user", async () => {
+    const logs = [
+      {
+        id: 1,
+        diaryDate: new Date("2025-01-01"),
+        generationStatus: "generated",
+        generatedAt: new Date(),
+        generationError: null,
+      },
+      {
+        id: 2,
+        diaryDate: new Date("2025-01-02"),
+        generationStatus: "failed",
+        generatedAt: null,
+        generationError: "模型返回格式不正确",
+      },
+    ];
+    vi.mocked(findRecentDiaryGenerationLogs).mockResolvedValue(logs);
+
+    const result = await caller.generationLogs({ limit: 10 });
+
+    expect(result).toEqual(logs);
+    expect(findRecentDiaryGenerationLogs).toHaveBeenCalledWith(user.id, 10);
+  });
+
+  it("uses default limit when input is omitted", async () => {
+    vi.mocked(findRecentDiaryGenerationLogs).mockResolvedValue([]);
+
+    await caller.generationLogs();
+
+    expect(findRecentDiaryGenerationLogs).toHaveBeenCalledWith(user.id, 10);
   });
 });
 
