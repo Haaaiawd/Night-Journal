@@ -27,6 +27,8 @@ import {
   Save,
   FolderOpen,
   Brain,
+  RefreshCw,
+  Play,
 } from 'lucide-react'
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -884,6 +886,10 @@ function WriterModelTab() {
   })
   const testDiary = trpc.aiSettings.testDiary.useMutation()
   const { data: generationLogs } = trpc.diaries.generationLogs.useQuery({ limit: 10 })
+  const regenerateDiary = trpc.diaries.regenerate.useMutation({
+    onSuccess: () => utils.diaries.generationLogs.invalidate(),
+  })
+  const [retryingDate, setRetryingDate] = useState<string | null>(null)
 
   const [apiBase, setApiBase] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -1462,56 +1468,87 @@ function WriterModelTab() {
                 暂无生成记录
               </p>
             ) : (
-              generationLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-start justify-between gap-3 rounded-xl p-3"
-                  style={{ backgroundColor: 'var(--bg-elevated)' }}
-                >
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                      {new Date(log.diaryDate).toLocaleDateString('zh-CN', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </span>
-                    {log.generationError && (
-                      <span className="text-xs break-words" style={{ color: 'var(--text-tertiary)' }}>
-                        {log.generationError}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span
-                      className="text-xs font-medium"
-                      style={{
-                        color:
-                          log.generationStatus === 'generated'
-                            ? '#16a34a'
-                            : log.generationStatus === 'failed'
-                              ? '#dc2626'
-                              : 'var(--text-tertiary)',
-                      }}
-                    >
-                      {log.generationStatus === 'generated'
-                        ? '成功'
-                        : log.generationStatus === 'failed'
-                          ? '失败'
-                          : '生成中'}
-                    </span>
-                    {log.generatedAt && (
-                      <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
-                        {new Date(log.generatedAt).toLocaleString('zh-CN', {
+              generationLogs.map((log) => {
+                const dateStr = new Date(log.diaryDate).toISOString().slice(0, 10)
+                const isRetrying = retryingDate === dateStr && regenerateDiary.isPending
+                return (
+                  <div
+                    key={log.id}
+                    className="flex items-start justify-between gap-3 rounded-xl p-3"
+                    style={{ backgroundColor: 'var(--bg-elevated)' }}
+                  >
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {new Date(log.diaryDate).toLocaleDateString('zh-CN', {
                           month: 'short',
                           day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
                         })}
                       </span>
-                    )}
+                      {log.generationError && (
+                        <span className="text-xs break-words" style={{ color: 'var(--text-tertiary)' }}>
+                          {log.generationError}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {log.generationStatus === 'failed' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 gap-1 rounded-md px-2 text-xs"
+                          style={{ color: 'var(--accent)' }}
+                          disabled={isRetrying}
+                          onClick={() => {
+                            setRetryingDate(dateStr)
+                            regenerateDiary.mutate(
+                              { date: dateStr },
+                              {
+                                onSettled: () => setRetryingDate(null),
+                              },
+                            )
+                          }}
+                        >
+                          {isRetrying ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <RefreshCw size={12} />
+                          )}
+                          重试
+                        </Button>
+                      )}
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className="text-xs font-medium"
+                          style={{
+                            color:
+                              log.generationStatus === 'generated'
+                                ? '#16a34a'
+                                : log.generationStatus === 'failed'
+                                  ? '#dc2626'
+                                  : 'var(--text-tertiary)',
+                          }}
+                        >
+                          {log.generationStatus === 'generated'
+                            ? '成功'
+                            : log.generationStatus === 'failed'
+                              ? '失败'
+                              : '生成中'}
+                        </span>
+                        {log.generatedAt && (
+                          <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                            {new Date(log.generatedAt).toLocaleString('zh-CN', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </CardContent>
         </Card>
@@ -1930,12 +1967,19 @@ function MemoryTab() {
   const resetProfileMutation = trpc.memories.resetProfile.useMutation({
     onSuccess: () => utils.memories.getProfile.invalidate(),
   })
+  const triggerDreamMutation = trpc.memories.triggerDream.useMutation({
+    onSuccess: () => {
+      utils.memories.getProfile.invalidate()
+      utils.memories.listShortTerm.invalidate()
+    },
+  })
 
   const enableDream = settings?.enableDream ?? true
 
   const hasProfile = profile && (profile.summary || profile.persona || profile.relationships || profile.emotionalTone || profile.languageStyle)
   const memories = shortTermMemories ?? []
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+  const [dreamMessage, setDreamMessage] = useState<{ text: string; success: boolean } | null>(null)
 
   return (
     <motion.div
@@ -1962,7 +2006,7 @@ function MemoryTab() {
               日记生成后，AI 会自动提炼对你的抽象理解（人格、关系、情绪、语风），用于让后续日记更有连续性
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-4">
+          <CardContent className="flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                 启用 Dream
@@ -1975,6 +2019,47 @@ function MemoryTab() {
                 disabled={updateDiaryMutation.isPending}
               />
             </div>
+            {enableDream && (
+              <>
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 rounded-lg border-0"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    color: 'var(--text-primary)',
+                  }}
+                  onClick={() => {
+                    setDreamMessage(null)
+                    triggerDreamMutation.mutate(undefined, {
+                      onSuccess: (data) => {
+                        setDreamMessage({ text: data.message, success: data.success })
+                        setTimeout(() => setDreamMessage(null), 6000)
+                      },
+                      onError: (err) => {
+                        setDreamMessage({ text: err.message, success: false })
+                        setTimeout(() => setDreamMessage(null), 6000)
+                      },
+                    })
+                  }}
+                  disabled={triggerDreamMutation.isPending}
+                >
+                  {triggerDreamMutation.isPending ? (
+                    <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                  ) : (
+                    <Play size={16} />
+                  )}
+                  {triggerDreamMutation.isPending ? '运行中...' : '手动运行 Dream'}
+                </Button>
+                {dreamMessage && (
+                  <p
+                    className="text-xs px-1"
+                    style={{ color: dreamMessage.success ? 'var(--success)' : 'var(--error)' }}
+                  >
+                    {dreamMessage.text}
+                  </p>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
       </motion.div>
