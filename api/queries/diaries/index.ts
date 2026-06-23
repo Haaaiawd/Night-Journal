@@ -77,6 +77,26 @@ export async function findRecentGeneratedDiaries(userId: number, days: number) {
     .limit(days);
 }
 
+/**
+ * Recent diary generation attempts for the settings log view.
+ * Includes pending, generated and failed rows so users can see whether
+ * auto-generation succeeded and what went wrong when it failed.
+ */
+export async function findRecentDiaryGenerationLogs(userId: number, limit: number) {
+  return getDb()
+    .select({
+      id: diaries.id,
+      diaryDate: diaries.diaryDate,
+      generationStatus: diaries.generationStatus,
+      generatedAt: diaries.generatedAt,
+      generationError: diaries.generationError,
+    })
+    .from(diaries)
+    .where(eq(diaries.userId, userId))
+    .orderBy(desc(diaries.diaryDate))
+    .limit(limit);
+}
+
 export async function createDiary(
   userId: number,
   data: {
@@ -123,6 +143,7 @@ export async function updateDiary(
     length?: string;
     diaryModelUsed?: string;
     generationStatus?: string;
+    generationError?: string | null;
     generatedAt?: Date;
     manuallyEdited?: boolean;
   },
@@ -137,6 +158,7 @@ export async function updateDiary(
   if (data.length !== undefined) updateData.length = data.length;
   if (data.diaryModelUsed !== undefined) updateData.diaryModelUsed = data.diaryModelUsed;
   if (data.generationStatus !== undefined) updateData.generationStatus = data.generationStatus;
+  if (data.generationError !== undefined) updateData.generationError = data.generationError;
   if (data.generatedAt !== undefined) updateData.generatedAt = data.generatedAt;
   if (data.manuallyEdited !== undefined) updateData.manuallyEdited = data.manuallyEdited;
 

@@ -336,8 +336,12 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
     }
   } catch (err) {
     console.error(`[diary] Generation failed for user ${userId} date ${date}:`, err);
+    const message = err instanceof Error ? err.message : String(err);
     if (diary.generationStatus === "pending") {
-      await updateDiary(userId, diary.id, { generationStatus: "failed" });
+      await updateDiary(userId, diary.id, {
+        generationStatus: "failed",
+        generationError: message,
+      });
     }
     throw err;
   }

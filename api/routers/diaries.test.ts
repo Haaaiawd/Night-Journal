@@ -94,6 +94,7 @@ function makeDiary(id: number, userId: number) {
     style: null,
     length: null,
     generationStatus: "generated",
+    generationError: null,
     generatedAt: new Date(),
     manuallyEdited: false,
     diaryModelUsed: null,

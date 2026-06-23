@@ -12,6 +12,7 @@ import {
   createDiaryVersion,
   findVersionsByDiaryId,
   deleteDiary,
+  findRecentDiaryGenerationLogs,
 } from "../queries/diaries";
 import { findAiSettingsByUserId } from "../queries/ai-settings";
 import { generateDiaryForDate } from "../services/diary";
@@ -68,6 +69,19 @@ export const diariesRouter = createRouter({
       }
       const versions = await findVersionsByDiaryId(input.diaryId, ctx.user.id);
       return versions;
+    }),
+
+  generationLogs: authedQuery
+    .input(
+      z
+        .object({
+          limit: z.number().int().min(1).max(50).default(10),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const limit = input?.limit ?? 10;
+      return findRecentDiaryGenerationLogs(ctx.user.id, limit);
     }),
 
   // ── mutations ────────────────────────────────────────────────────

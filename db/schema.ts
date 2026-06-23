@@ -92,6 +92,7 @@ export const diaries = mysqlTable("diaries", {
   length: varchar("length", { length: 20 }).default("中"),
   diaryModelUsed: varchar("diary_model_used", { length: 100 }),
   generationStatus: varchar("generation_status", { length: 20 }).default("pending").notNull(),
+  generationError: text("generation_error"),
   generatedAt: timestamp("generated_at"),
   manuallyEdited: boolean("manually_edited").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
