@@ -883,6 +883,7 @@ function WriterModelTab() {
     onSuccess: () => utils.aiSettings.get.invalidate(),
   })
   const testDiary = trpc.aiSettings.testDiary.useMutation()
+  const { data: generationLogs } = trpc.diaries.generationLogs.useQuery({ limit: 10 })
 
   const [apiBase, setApiBase] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -1431,6 +1432,87 @@ function WriterModelTab() {
                 恢复默认
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Generation Logs */}
+      <motion.div variants={cardItem}>
+        <Card
+          className="overflow-hidden rounded-2xl border-0 shadow-none"
+          style={{ backgroundColor: 'var(--bg-surface)' }}
+        >
+          <CardHeader className="px-4 pt-4 pb-0">
+            <CardTitle
+              className="text-base font-medium"
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                color: 'var(--text-primary)',
+              }}
+            >
+              生成日志
+            </CardTitle>
+            <CardDescription style={{ color: 'var(--text-tertiary)' }} className="text-xs">
+              最近 10 次日记生成记录
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 p-4">
+            {!generationLogs || generationLogs.length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                暂无生成记录
+              </p>
+            ) : (
+              generationLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="flex items-start justify-between gap-3 rounded-xl p-3"
+                  style={{ backgroundColor: 'var(--bg-elevated)' }}
+                >
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {new Date(log.diaryDate).toLocaleDateString('zh-CN', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                    {log.generationError && (
+                      <span className="text-xs break-words" style={{ color: 'var(--text-tertiary)' }}>
+                        {log.generationError}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span
+                      className="text-xs font-medium"
+                      style={{
+                        color:
+                          log.generationStatus === 'generated'
+                            ? '#16a34a'
+                            : log.generationStatus === 'failed'
+                              ? '#dc2626'
+                              : 'var(--text-tertiary)',
+                      }}
+                    >
+                      {log.generationStatus === 'generated'
+                        ? '成功'
+                        : log.generationStatus === 'failed'
+                          ? '失败'
+                          : '生成中'}
+                    </span>
+                    {log.generatedAt && (
+                      <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                        {new Date(log.generatedAt).toLocaleString('zh-CN', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </motion.div>

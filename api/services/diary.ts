@@ -20,6 +20,29 @@ import type { ShortTermMemory } from "@db/schema";
 // diary generation.
 const dreamInFlight = new Set<string>();
 
+/**
+ * Convert an internal generation error into a user-safe message.
+ * Never forward raw provider/transport diagnostics to the client.
+ */
+function sanitizeGenerationError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const lower = message.toLowerCase();
+
+  if (lower.includes("fetch") || lower.includes("network") || lower.includes("econnrefused")) {
+    return "连接模型服务失败，请检查网络或 API 地址";
+  }
+  if (lower.includes("timeout")) {
+    return "模型响应超时，请稍后重试";
+  }
+  if (lower.includes("api key") || lower.includes("unauthorized") || lower.includes("authentication") || lower.includes("401")) {
+    return "API 密钥无效或已被拒绝";
+  }
+  if (lower.includes("parse") || lower.includes("json")) {
+    return "模型返回格式不正确，无法解析为日记";
+  }
+  return "生成失败，请稍后重试";
+}
+
 function getStylePrompt(style: string, stylePromptsJson?: string | null): string {
   if (stylePromptsJson) {
     try {
@@ -301,6 +324,7 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
       length,
       diaryModelUsed: settings.diaryModel ?? "default",
       generationStatus: "generated",
+      generationError: null,
       generatedAt: new Date(),
       manuallyEdited: false,
     });
@@ -336,8 +360,12 @@ export async function generateDiaryForDate(userId: number, date: string): Promis
     }
   } catch (err) {
     console.error(`[diary] Generation failed for user ${userId} date ${date}:`, err);
+    const safeMessage = sanitizeGenerationError(err);
     if (diary.generationStatus === "pending") {
-      await updateDiary(userId, diary.id, { generationStatus: "failed" });
+      await updateDiary(userId, diary.id, {
+        generationStatus: "failed",
+        generationError: safeMessage,
+      });
     }
     throw err;
   }
