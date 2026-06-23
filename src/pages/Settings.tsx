@@ -908,7 +908,7 @@ function WriterModelTab() {
       if (settings.diaryGenerationTime) setGenTime(settings.diaryGenerationTime)
       if (settings.diaryPromptTemplate) {
         const { system } = splitDiaryPrompt(settings.diaryPromptTemplate)
-        setSystemPrompt(system ?? settings.diaryPromptTemplate)
+        setSystemPrompt(system || DEFAULT_DIARY_SYSTEM_PROMPT)
       }
       if (settings.stylePrompts) {
         try {
@@ -941,7 +941,7 @@ function WriterModelTab() {
       diaryStyle: style,
       diaryLength: length,
       diaryGenerationTime: genTime,
-      diaryPromptTemplate: `${systemPrompt}\n\n---\n\n${DEFAULT_DIARY_USER_TEMPLATE}` || undefined,
+      diaryPromptTemplate: `${systemPrompt.trim() || DEFAULT_DIARY_SYSTEM_PROMPT}\n\n---\n\n${DEFAULT_DIARY_USER_TEMPLATE}`,
       stylePrompts: JSON.stringify(stylePromptsMap),
     }
     if (apiKey.trim()) {
