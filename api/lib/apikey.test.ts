@@ -14,7 +14,7 @@
  * NOTE: After running this test the key should be removed from .env.test.
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { config } from "dotenv";
 import path from "path";
 

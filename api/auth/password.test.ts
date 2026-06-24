@@ -71,7 +71,6 @@ async function post(app: Hono, path: string, body: unknown) {
 
 // A real bcrypt hash of "password1" for use in login tests
 const PASSWORD = "password1";
-let HASHED_PASSWORD: string;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -82,7 +81,7 @@ beforeEach(() => {
 });
 
 // Pre-compute the hash once (synchronous bcrypt.hashSync is fine in tests)
-HASHED_PASSWORD = bcrypt.hashSync(PASSWORD, 10);
+const HASHED_PASSWORD = bcrypt.hashSync(PASSWORD, 10);
 
 // ---------------------------------------------------------------------------
 // Register

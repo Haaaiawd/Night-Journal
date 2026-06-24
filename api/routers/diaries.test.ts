@@ -144,7 +144,6 @@ describe("diaries.delete", () => {
   });
 
   it("throws NOT_FOUND when diary belongs to a different user (ownership protection)", async () => {
-    const otherUserId = 999;
     // findDiaryById already filters by userId — returning undefined means no match
     vi.mocked(findDiaryById).mockResolvedValue(undefined);
 
