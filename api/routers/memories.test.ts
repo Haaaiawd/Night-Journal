@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { User } from "@db/schema";
+import type { AiSettings, User } from "@db/schema";
 
 vi.mock("../queries/memories", () => ({
   findProfileByUserId: vi.fn(),
@@ -39,12 +39,22 @@ vi.mock("../lib/env", () => ({
   },
 }));
 
+vi.mock("../queries/ai-settings", () => ({
+  findAiSettingsByUserId: vi.fn(),
+}));
+
+vi.mock("../services/dream", () => ({
+  dreamProfileDetailed: vi.fn(),
+}));
+
 import {
   findProfileByUserId,
   findActiveShortTermMemories,
   deleteShortTermMemory,
   resetProfile,
 } from "../queries/memories";
+import { findAiSettingsByUserId } from "../queries/ai-settings";
+import { dreamProfileDetailed } from "../services/dream";
 import { memoriesRouter } from "./memories";
 import type { TrpcContext } from "../context";
 
@@ -73,6 +83,32 @@ function makeCtx(user: User): TrpcContext {
     req: new Request("http://localhost"),
     resHeaders: new Headers(),
     user,
+  };
+}
+
+function makeAiSettings(userId: number, overrides: Partial<AiSettings> = {}): AiSettings {
+  return {
+    id: 1,
+    userId,
+    visionApiKey: null,
+    visionApiBaseUrl: null,
+    visionModel: null,
+    enableImageUnderstanding: true,
+    visionPromptTemplate: null,
+    diaryApiKey: "sk-test",
+    diaryApiBaseUrl: "https://api.test/v1",
+    diaryModel: null,
+    diaryGenerationTime: "02:00",
+    diaryLanguage: "zh",
+    diaryStyle: "温柔真实",
+    diaryLength: "中",
+    diaryPromptTemplate: null,
+    stylePrompts: null,
+    enableDream: true,
+    timezone: "Asia/Shanghai",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
   };
 }
 
@@ -177,6 +213,67 @@ describe("memories.resetProfile", () => {
     const result = await caller.resetProfile();
     expect(result).toEqual({ success: true });
     expect(resetProfile).toHaveBeenCalledWith(user.id);
+  });
+});
+
+describe("memories.triggerDream", () => {
+  it("rejects when diary API config is missing", async () => {
+    const user = makeUser(1);
+    const caller = makeCaller(makeCtx(user));
+    vi.mocked(findAiSettingsByUserId).mockResolvedValue(undefined);
+
+    const result = await caller.triggerDream();
+
+    expect(result).toEqual({ success: false, message: "请先在写作模型中配置 API" });
+    expect(dreamProfileDetailed).not.toHaveBeenCalled();
+  });
+
+  it("rejects when Dream is disabled", async () => {
+    const user = makeUser(1);
+    const caller = makeCaller(makeCtx(user));
+    vi.mocked(findAiSettingsByUserId).mockResolvedValue(makeAiSettings(user.id, { enableDream: false }));
+
+    const result = await caller.triggerDream();
+
+    expect(result).toEqual({ success: false, message: "Dream 记忆未启用" });
+    expect(dreamProfileDetailed).not.toHaveBeenCalled();
+  });
+
+  it("runs Dream and returns success", async () => {
+    const user = makeUser(1);
+    const caller = makeCaller(makeCtx(user));
+    vi.mocked(findAiSettingsByUserId).mockResolvedValue(makeAiSettings(user.id));
+    vi.mocked(dreamProfileDetailed).mockResolvedValue({ success: true });
+
+    const result = await caller.triggerDream();
+
+    expect(result).toEqual({ success: true, message: "记忆更新成功" });
+    expect(dreamProfileDetailed).toHaveBeenCalledWith(user.id, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  it("returns a specific message for provider failures", async () => {
+    const user = makeUser(1);
+    const caller = makeCaller(makeCtx(user));
+    vi.mocked(findAiSettingsByUserId).mockResolvedValue(makeAiSettings(user.id));
+    vi.mocked(dreamProfileDetailed).mockResolvedValue({ success: false, reason: "failed" });
+
+    const result = await caller.triggerDream();
+
+    expect(result).toEqual({
+      success: false,
+      message: "Dream 运行失败，请稍后重试或检查写作模型配置",
+    });
+  });
+
+  it("returns a specific message while another Dream pass is running", async () => {
+    const user = makeUser(1);
+    const caller = makeCaller(makeCtx(user));
+    vi.mocked(findAiSettingsByUserId).mockResolvedValue(makeAiSettings(user.id));
+    vi.mocked(dreamProfileDetailed).mockResolvedValue({ success: false, reason: "already_running" });
+
+    const result = await caller.triggerDream();
+
+    expect(result).toEqual({ success: false, message: "Dream 正在运行，请稍后再试" });
   });
 });
 
