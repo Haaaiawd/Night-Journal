@@ -7,7 +7,16 @@ import {
   resetProfile,
 } from "../queries/memories";
 import { findAiSettingsByUserId } from "../queries/ai-settings";
-import { dreamProfile } from "../services/dream";
+import { dreamProfileDetailed } from "../services/dream";
+
+const DREAM_MESSAGES = {
+  missing_config: "请先在写作模型中配置 API",
+  disabled: "Dream 记忆未启用",
+  already_running: "Dream 正在运行，请稍后再试",
+  no_material: "暂无足够的日记素材来提炼画像",
+  unparseable_response: "模型返回格式异常，请稍后重试或检查写作模型配置",
+  failed: "Dream 运行失败，请稍后重试或检查写作模型配置",
+} as const;
 
 export const memoriesRouter = createRouter({
   // ── queries ──────────────────────────────────────────────────────
@@ -55,10 +64,10 @@ export const memoriesRouter = createRouter({
 
     const tz = settings.timezone || "Asia/Shanghai";
     const todayDate = new Date().toLocaleString("sv-SE", { timeZone: tz, hour12: false }).split(" ")[0];
-    const updated = await dreamProfile(ctx.user.id, todayDate);
+    const result = await dreamProfileDetailed(ctx.user.id, todayDate);
     return {
-      success: updated,
-      message: updated ? "记忆更新成功" : "暂无足够的日记素材来提炼画像",
+      success: result.success,
+      message: result.success ? "记忆更新成功" : DREAM_MESSAGES[result.reason ?? "failed"],
     };
   }),
 });

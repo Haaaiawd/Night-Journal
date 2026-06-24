@@ -553,26 +553,6 @@ export default function Diary() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  /* Auth gate */
-  if (!authLoading && !isAuthenticated) {
-    return (
-      <div
-        className="flex min-h-[100dvh] flex-col items-center justify-center px-6"
-        style={{ color: "var(--text-secondary)" }}
-      >
-        <BookOpen size={64} strokeWidth={1} style={{ color: "var(--text-tertiary)" }} />
-        <p className="mt-4 font-display text-lg">请先登录</p>
-        <button
-          onClick={() => navigate("/login")}
-          className="mt-4 rounded-xl px-6 py-2.5 font-ui text-sm font-medium text-white"
-          style={{ backgroundColor: "var(--accent)" }}
-        >
-          去登录
-        </button>
-      </div>
-    );
-  }
-
   /* tRPC queries */
   const { data, isLoading, refetch } = trpc.diaries.list.useQuery(
     { limit, offset: 0 },
@@ -661,6 +641,26 @@ export default function Diary() {
 
   /* Show loading skeletons */
   const showSkeletons = isLoading && allDiaries.length === 0;
+
+  /* Auth gate */
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div
+        className="flex min-h-[100dvh] flex-col items-center justify-center px-6"
+        style={{ color: "var(--text-secondary)" }}
+      >
+        <BookOpen size={64} strokeWidth={1} style={{ color: "var(--text-tertiary)" }} />
+        <p className="mt-4 font-display text-lg">请先登录</p>
+        <button
+          onClick={() => navigate("/login")}
+          className="mt-4 rounded-xl px-6 py-2.5 font-ui text-sm font-medium text-white"
+          style={{ backgroundColor: "var(--accent)" }}
+        >
+          去登录
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">

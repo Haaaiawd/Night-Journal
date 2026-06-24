@@ -9,7 +9,7 @@
  * objects without spinning up a real HTTP server.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
 import { OAuth } from "@contracts/constants";
 
