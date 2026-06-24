@@ -78,6 +78,21 @@ const DREAM_SYSTEM_PROMPT = `我像是用户梦境边缘的一个安静整理者
 
 const DREAM_LOOKBACK_DAYS = 7;
 
+export type DreamProfileReason =
+  | "missing_config"
+  | "disabled"
+  | "already_running"
+  | "no_material"
+  | "unparseable_response"
+  | "failed";
+
+export interface DreamProfileResult {
+  success: boolean;
+  reason?: DreamProfileReason;
+}
+
+const inFlightDreamProfiles = new Map<number, Promise<DreamProfileResult>>();
+
 interface DreamResult {
   profile: {
     persona?: string;
@@ -231,12 +246,31 @@ export function parseDreamResponse(content: string): DreamResult | null {
  * Returns true if the profile was updated, false on skip/failure.
  */
 export async function dreamProfile(userId: number, todayDate: string): Promise<boolean> {
+  const result = await dreamProfileDetailed(userId, todayDate);
+  return result.success;
+}
+
+export async function dreamProfileDetailed(userId: number, todayDate: string): Promise<DreamProfileResult> {
+  if (inFlightDreamProfiles.has(userId)) {
+    return { success: false, reason: "already_running" };
+  }
+
+  const promise = runDreamProfile(userId, todayDate);
+  inFlightDreamProfiles.set(userId, promise);
+  try {
+    return await promise;
+  } finally {
+    inFlightDreamProfiles.delete(userId);
+  }
+}
+
+async function runDreamProfile(userId: number, todayDate: string): Promise<DreamProfileResult> {
   const settings = await findAiSettingsByUserId(userId);
   if (!settings || !settings.diaryApiKey || !settings.diaryApiBaseUrl) {
-    return false;
+    return { success: false, reason: "missing_config" };
   }
   if (settings.enableDream === false) {
-    return false;
+    return { success: false, reason: "disabled" };
   }
 
   try {
@@ -248,7 +282,7 @@ export async function dreamProfile(userId: number, todayDate: string): Promise<b
 
     // Nothing to learn from if there are no diaries and no entries today.
     if (recentDiaries.length === 0 && todayEntries.length === 0) {
-      return false;
+      return { success: false, reason: "no_material" };
     }
 
     const userMessage = buildDreamUserMessage({
@@ -279,7 +313,7 @@ export async function dreamProfile(userId: number, todayDate: string): Promise<b
     const parsed = parseDreamResponse(content);
     if (!parsed) {
       console.error(`[dream] Unparseable response for user ${userId}`);
-      return false;
+      return { success: false, reason: "unparseable_response" };
     }
 
     // Build profile update, preserving existing fields the LLM omitted.
@@ -317,9 +351,9 @@ export async function dreamProfile(userId: number, todayDate: string): Promise<b
     console.log(
       `[dream] Updated profile for user ${userId}: ${parsed.shortTermMemories.length} short-term memories`,
     );
-    return true;
+    return { success: true };
   } catch (err) {
     console.error(`[dream] Failed for user ${userId}:`, err);
-    return false;
+    return { success: false, reason: "failed" };
   }
 }
