@@ -2,6 +2,31 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../connection";
 import { aiSettings } from "@db/schema";
 import type { InsertAiSettings } from "@db/schema";
+import { decryptApiKey, encryptApiKey } from "../../lib/crypto";
+
+function decryptSettingsFields<T extends { visionApiKey?: string | null; diaryApiKey?: string | null }>(
+  settings: T | undefined,
+): T | undefined {
+  if (!settings) return undefined;
+  return {
+    ...settings,
+    visionApiKey: decryptApiKey(settings.visionApiKey),
+    diaryApiKey: decryptApiKey(settings.diaryApiKey),
+  };
+}
+
+function encryptSettingsData(
+  data: Partial<InsertAiSettings>,
+): Partial<InsertAiSettings> {
+  const encrypted = { ...data };
+  if ("visionApiKey" in data && data.visionApiKey !== undefined) {
+    encrypted.visionApiKey = encryptApiKey(data.visionApiKey) ?? null;
+  }
+  if ("diaryApiKey" in data && data.diaryApiKey !== undefined) {
+    encrypted.diaryApiKey = encryptApiKey(data.diaryApiKey) ?? null;
+  }
+  return encrypted;
+}
 
 export async function findAiSettingsByUserId(userId: number) {
   const rows = await getDb()
@@ -9,7 +34,7 @@ export async function findAiSettingsByUserId(userId: number) {
     .from(aiSettings)
     .where(eq(aiSettings.userId, userId))
     .limit(1);
-  return rows.at(0);
+  return decryptSettingsFields(rows.at(0));
 }
 
 export async function upsertAiSettings(
@@ -17,13 +42,16 @@ export async function upsertAiSettings(
   data: Partial<Omit<InsertAiSettings, "id" | "userId" | "createdAt" | "updatedAt">>,
 ) {
   const db = getDb();
+  const encrypted = encryptSettingsData(data as Partial<InsertAiSettings>);
 
-  const existing = await findAiSettingsByUserId(userId);
+  const existing = await db.query.aiSettings.findFirst({
+    where: eq(aiSettings.userId, userId),
+  });
 
   if (existing) {
     await db
       .update(aiSettings)
-      .set(data)
+      .set(encrypted)
       .where(eq(aiSettings.userId, userId));
     return findAiSettingsByUserId(userId);
   }
@@ -32,14 +60,14 @@ export async function upsertAiSettings(
     .insert(aiSettings)
     .values({
       userId,
-      ...data,
+      ...encrypted,
     } as InsertAiSettings)
     .$returningId();
 
   const settings = await db.query.aiSettings.findFirst({
     where: eq(aiSettings.id, id),
   });
-  return settings;
+  return decryptSettingsFields(settings);
 }
 
 export async function updateVisionSettings(

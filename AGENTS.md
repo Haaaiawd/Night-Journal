@@ -229,7 +229,7 @@ POST /api/auth/login  { username, password }
 
 1. **文件上传 OSS** — `api/routers/upload.ts` 返回 mock URL，需接入 Aliyun OSS / AWS S3 / MinIO
 2. ~~**AI 日记生成**~~ — 已实现（`api/services/diary.ts` + `api/lib/scheduler.ts`），支持手动触发和定时自动生成
-3. **API key 加密存储** — 当前明文存入 MySQL，建议生产环境用 AES-256-GCM + env 密钥加密
+3. **API key 加密存储** — 已实现 AES-256-GCM + `APP_SECRET` 派生密钥加密存储
 4. **图片碎片持久化** — Home 页图片上传路径未打通，依赖 TODO 1
 
 ---
