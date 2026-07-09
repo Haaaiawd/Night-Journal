@@ -23,6 +23,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 import { useSearchParams } from 'react-router'
 import { Calendar } from '@/components/ui/calendar'
+import { Skeleton } from '@/components/ui/skeleton'
 import { format, parseISO } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 
@@ -238,6 +239,35 @@ function VisionBadge({ meta }: { meta: AttachmentMeta }) {
 // Fragment Card Component
 // ──────────────────────────────────────────────────────────
 
+function FragmentSkeleton() {
+  return (
+    <div
+      className="rounded-2xl p-4"
+      style={{
+        backgroundColor: 'var(--bg-surface)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+        border: '1px solid var(--divider)',
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <Skeleton className="h-5 w-12 rounded-full" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <Skeleton className="h-4 w-12" />
+        </div>
+      </div>
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="mt-2 h-4 w-3/4" />
+      <Skeleton className="mt-2 h-4 w-1/2" />
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Skeleton className="aspect-square rounded-xl" />
+        <Skeleton className="aspect-square rounded-xl" />
+      </div>
+    </div>
+  )
+}
+
 function FragmentCard({
   fragment,
   index,
@@ -271,19 +301,19 @@ function FragmentCard({
             <div className="flex items-center gap-1">
               <button
                 onClick={() => onEdit?.(fragment)}
-                className="flex h-7 w-7 items-center justify-center rounded-full"
+                className="flex h-10 w-10 items-center justify-center rounded-full active:scale-90"
                 style={{ color: 'var(--text-tertiary)' }}
                 aria-label="编辑"
               >
-                <Pencil size={14} />
+                <Pencil size={16} />
               </button>
               <button
                 onClick={() => onDelete?.(fragment)}
-                className="flex h-7 w-7 items-center justify-center rounded-full"
+                className="flex h-10 w-10 items-center justify-center rounded-full active:scale-90"
                 style={{ color: 'var(--text-tertiary)' }}
                 aria-label="删除"
               >
-                <Trash2 size={14} />
+                <Trash2 size={16} />
               </button>
             </div>
           )}
@@ -666,10 +696,9 @@ function BottomDrawer({
                   {images.length === 0 ? (
                     <div
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-colors duration-200"
-                      style={{ borderColor: 'var(--divider)' }}
+                      className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[var(--divider)] p-8 transition-all duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] active:scale-[0.98]"
                     >
-                      <ImagePlus size={36} style={{ color: 'var(--text-tertiary)' }} />
+                      <ImagePlus size={36} className="text-[var(--text-tertiary)] transition-colors group-hover:text-[var(--accent)]" />
                       <p
                         className="mt-2 text-sm font-ui"
                         style={{ color: 'var(--text-secondary)' }}
@@ -688,7 +717,7 @@ function BottomDrawer({
                       {images.map((img, i) => (
                         <div
                           key={i}
-                          className="relative aspect-square overflow-hidden rounded-xl"
+                          className="group relative aspect-square overflow-hidden rounded-xl"
                         >
                           <img
                             src={img}
@@ -697,19 +726,18 @@ function BottomDrawer({
                           />
                           <button
                             onClick={() => removeImage(i)}
-                            className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white"
+                            className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white transition-transform active:scale-90"
                           >
-                            <X size={12} />
+                            <X size={16} />
                           </button>
                         </div>
                       ))}
                       {images.length < 9 && (
                         <button
                           onClick={() => fileInputRef.current?.click()}
-                          className="flex aspect-square items-center justify-center rounded-xl border-2 border-dashed"
-                          style={{ borderColor: 'var(--divider)' }}
+                          className="group flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-[var(--divider)] transition-all duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] active:scale-[0.98]"
                         >
-                          <Plus size={24} style={{ color: 'var(--text-tertiary)' }} />
+                          <Plus size={24} className="text-[var(--text-tertiary)] transition-colors group-hover:text-[var(--accent)]" />
                         </button>
                       )}
                     </div>
@@ -732,7 +760,7 @@ function BottomDrawer({
                 whileTap={canSubmit && !isSubmitting ? { scale: 0.97 } : {}}
                 onClick={handleSubmit}
                 disabled={!canSubmit || isSubmitting}
-                className="flex h-[52px] w-full items-center justify-center rounded-[14px] font-ui text-sm font-semibold text-white transition-opacity duration-200 disabled:opacity-40"
+                className="flex h-[52px] w-full items-center justify-center rounded-[14px] font-ui text-sm font-semibold text-accent-foreground transition-opacity duration-200 disabled:cursor-not-allowed disabled:opacity-40"
                 style={{ backgroundColor: 'var(--accent)' }}
               >
                 {showSuccess ? (
@@ -899,7 +927,7 @@ export default function Home() {
   // DB record (e.g. process crash mid-vision) can't poll indefinitely.
   const VISION_POLL_INTERVAL = 3000
   const VISION_POLL_MAX_AGE_MS = 5 * 60 * 1000
-  const { data: serverEntries = [] } = trpc.entries.list.useQuery(
+  const { data: serverEntries = [], isLoading: entriesLoading } = trpc.entries.list.useQuery(
     { date: activeDate },
     {
       enabled: isAuthenticated,
@@ -1127,7 +1155,14 @@ export default function Home() {
 
       {/* ── Fragment Stream ── */}
       <div className="px-4 pb-32 pt-3">
-        {fragments.length === 0 ? (
+        {entriesLoading ? (
+          /* ── Loading Skeletons ── */
+          <div className="flex flex-col gap-3">
+            <FragmentSkeleton />
+            <FragmentSkeleton />
+            <FragmentSkeleton />
+          </div>
+        ) : fragments.length === 0 ? (
           /* ── Empty State ── */
           <motion.div
             initial={{ opacity: 0 }}
@@ -1178,9 +1213,9 @@ export default function Home() {
         }}
         whileTap={{ scale: 0.88, x: '-50%' }}
         onClick={handleOpenCreate}
-        className="fixed left-1/2 z-fab flex h-14 w-14 items-center justify-center rounded-full text-white shadow-fab"
+        className="fixed left-1/2 z-fab flex h-14 w-14 items-center justify-center rounded-full text-accent-foreground shadow-fab"
         style={{
-          bottom: '88px',
+          bottom: 'calc(64px + env(safe-area-inset-bottom) + 24px)',
           backgroundColor: 'var(--accent)',
         }}
         aria-label="添加记录"
