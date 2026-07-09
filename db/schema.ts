@@ -128,14 +128,14 @@ export const aiSettings = mysqlTable("ai_settings", {
   id: serial("id").primaryKey(),
   userId: bigint("user_id", { mode: "number", unsigned: true }).notNull().unique(),
   // Vision model config
-  // NOTE: API keys are stored as plaintext. Consider encrypting at-rest before going to production.
+  // NOTE: API keys are encrypted at-rest using AES-256-GCM (see api/lib/crypto.ts).
   visionApiKey: text("vision_api_key"),
   visionApiBaseUrl: varchar("vision_api_base_url", { length: 500 }),
   visionModel: varchar("vision_model", { length: 100 }),
   enableImageUnderstanding: boolean("enable_image_understanding").default(true).notNull(),
   visionPromptTemplate: text("vision_prompt_template"),
   // Diary writer model config
-  // NOTE: API keys are stored as plaintext. Consider encrypting at-rest before going to production.
+  // NOTE: API keys are encrypted at-rest using AES-256-GCM (see api/lib/crypto.ts).
   diaryApiKey: text("diary_api_key"),
   diaryApiBaseUrl: varchar("diary_api_base_url", { length: 500 }),
   diaryModel: varchar("diary_model", { length: 100 }),
@@ -170,7 +170,7 @@ export const modelPresets = mysqlTable("model_presets", {
   name: varchar("name", { length: 100 }).notNull(),
   type: mysqlEnum("type", ["vision", "diary"]).notNull(),
   apiBaseUrl: varchar("api_base_url", { length: 500 }),
-  apiKey: text("api_key"),
+  apiKey: text("api_key"), // encrypted at-rest using AES-256-GCM (see api/lib/crypto.ts)
   model: varchar("model", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
