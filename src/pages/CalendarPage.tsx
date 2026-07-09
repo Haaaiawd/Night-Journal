@@ -509,7 +509,7 @@ export default function CalendarPage() {
                       className="font-ui text-xs"
                       style={{
                         color: dayIsToday
-                          ? "#FFFFFF"
+                          ? "hsl(var(--accent-foreground))"
                           : hasDiary
                             ? "var(--text-primary)"
                             : hasFragments

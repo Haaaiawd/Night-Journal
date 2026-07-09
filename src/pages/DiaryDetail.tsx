@@ -387,7 +387,7 @@ function DraftDiaryView({
         </motion.p>
 
         <motion.button
-          className="mt-6 inline-flex items-center gap-2 rounded-xl px-6 py-3 font-ui text-sm font-medium text-white"
+          className="mt-6 inline-flex items-center gap-2 rounded-xl px-6 py-3 font-ui text-sm font-medium text-accent-foreground"
           style={{ backgroundColor: "var(--accent)" }}
           onClick={onGenerate}
           disabled={isGenerating}
@@ -652,7 +652,7 @@ export default function DiaryDetail() {
         <p className="mt-4 font-display text-lg">请先登录</p>
         <button
           onClick={() => navigate("/login")}
-          className="mt-4 rounded-xl px-6 py-2.5 font-ui text-sm font-medium text-white"
+          className="mt-4 rounded-xl px-6 py-2.5 font-ui text-sm font-medium text-accent-foreground"
           style={{ backgroundColor: "var(--accent)" }}
         >
           去登录
