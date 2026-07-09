@@ -13,6 +13,7 @@ import {
   deletePreset,
 } from "../queries/model-presets";
 import { testModelConnection } from "../lib/openai";
+import { decryptApiKey } from "../lib/crypto";
 
 export const aiSettingsRouter = createRouter({
   // ── queries ──────────────────────────────────────────────────────
@@ -158,7 +159,8 @@ export const aiSettingsRouter = createRouter({
   // ── presets ────────────────────────────────────────────────────
 
   listPresets: authedQuery.query(async ({ ctx }) => {
-    return findPresetsByUserId(ctx.user.id);
+    const presets = await findPresetsByUserId(ctx.user.id);
+    return presets.map((p) => ({ ...p, apiKey: null }));
   }),
 
   createPreset: authedQuery
@@ -172,7 +174,8 @@ export const aiSettingsRouter = createRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return createPreset(ctx.user.id, input);
+      const preset = await createPreset(ctx.user.id, input);
+      return preset ? { ...preset, apiKey: null } : null;
     }),
 
   updatePreset: authedQuery
@@ -187,7 +190,8 @@ export const aiSettingsRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      return updatePreset(ctx.user.id, id, data);
+      const preset = await updatePreset(ctx.user.id, id, data);
+      return preset ? { ...preset, apiKey: null } : null;
     }),
 
   deletePreset: authedQuery
@@ -205,17 +209,18 @@ export const aiSettingsRouter = createRouter({
       if (!preset) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Preset not found" });
       }
+      const presetApiKey = decryptApiKey(preset.apiKey);
       if (preset.type === "vision") {
         const settings = await updateVisionSettings(ctx.user.id, {
           visionApiBaseUrl: preset.apiBaseUrl ?? undefined,
-          visionApiKey: preset.apiKey ?? undefined,
+          visionApiKey: presetApiKey ?? undefined,
           visionModel: preset.model ?? undefined,
         });
         return { ...settings, visionApiKey: undefined, diaryApiKey: undefined };
       }
       const settings = await updateDiarySettings(ctx.user.id, {
         diaryApiBaseUrl: preset.apiBaseUrl ?? undefined,
-        diaryApiKey: preset.apiKey ?? undefined,
+        diaryApiKey: presetApiKey ?? undefined,
         diaryModel: preset.model ?? undefined,
       });
       return { ...settings, visionApiKey: undefined, diaryApiKey: undefined };

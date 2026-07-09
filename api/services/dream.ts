@@ -91,7 +91,11 @@ export interface DreamProfileResult {
   reason?: DreamProfileReason;
 }
 
-const inFlightDreamProfiles = new Map<number, Promise<DreamProfileResult>>();
+const inFlightDreamProfiles = new Map<string, Promise<DreamProfileResult>>();
+
+function getDreamLockKey(userId: number, todayDate: string): string {
+  return `${userId}:${todayDate}`;
+}
 
 interface DreamResult {
   profile: {
@@ -251,16 +255,17 @@ export async function dreamProfile(userId: number, todayDate: string): Promise<b
 }
 
 export async function dreamProfileDetailed(userId: number, todayDate: string): Promise<DreamProfileResult> {
-  if (inFlightDreamProfiles.has(userId)) {
+  const lockKey = getDreamLockKey(userId, todayDate);
+  if (inFlightDreamProfiles.has(lockKey)) {
     return { success: false, reason: "already_running" };
   }
 
   const promise = runDreamProfile(userId, todayDate);
-  inFlightDreamProfiles.set(userId, promise);
+  inFlightDreamProfiles.set(lockKey, promise);
   try {
     return await promise;
   } finally {
-    inFlightDreamProfiles.delete(userId);
+    inFlightDreamProfiles.delete(lockKey);
   }
 }
 

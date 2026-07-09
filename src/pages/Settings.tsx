@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router'
 import {
@@ -37,6 +37,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
 import {
   AlertDialog,
@@ -105,6 +106,71 @@ const cardItem = {
     y: 0,
     transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] },
   },
+}
+
+function SettingsTabSkeleton() {
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <Card
+        className="rounded-2xl border-0 shadow-none"
+        style={{ backgroundColor: 'var(--bg-surface)' }}
+      >
+        <CardHeader className="px-4 pt-4 pb-0">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="mt-2 h-4 w-48" />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 p-4">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
+      <Card
+        className="rounded-2xl border-0 shadow-none"
+        style={{ backgroundColor: 'var(--bg-surface)' }}
+      >
+        <CardContent className="flex flex-col gap-3 p-4">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function MemorySkeleton() {
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <Card
+        className="rounded-2xl border-0 shadow-none"
+        style={{ backgroundColor: 'var(--bg-surface)' }}
+      >
+        <CardHeader className="px-4 pt-4 pb-0">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="mt-2 h-4 w-48" />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 p-4">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </CardContent>
+      </Card>
+      <Card
+        className="rounded-2xl border-0 shadow-none"
+        style={{ backgroundColor: 'var(--bg-surface)' }}
+      >
+        <CardHeader className="px-4 pt-4 pb-0">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="mt-2 h-4 w-48" />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 p-4">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
 /* ── types ── */
@@ -220,7 +286,7 @@ function PresetManager({
               <Button
                 size="sm"
                 className="rounded-lg"
-                style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                style={{ backgroundColor: 'var(--accent)', color: 'hsl(var(--accent-foreground))' }}
                 onClick={handleSave}
                 disabled={!presetName.trim() || createPresetMutation.isPending}
               >
@@ -304,6 +370,26 @@ function PresetManager({
    ═══════════════════════════════════════════ */
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('account')
+  const tabsListRef = useRef<HTMLDivElement>(null)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const checkScroll = useCallback(() => {
+    const el = tabsListRef.current
+    if (!el) return
+    setCanScrollRight(el.scrollWidth > el.clientWidth + 2)
+  }, [])
+
+  useEffect(() => {
+    const el = tabsListRef.current
+    if (!el) return
+    checkScroll()
+    el.addEventListener('scroll', checkScroll, { passive: true })
+    window.addEventListener('resize', checkScroll)
+    return () => {
+      el.removeEventListener('scroll', checkScroll)
+      window.removeEventListener('resize', checkScroll)
+    }
+  }, [checkScroll])
 
   return (
     <div className="min-h-[100dvh]" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -345,7 +431,8 @@ export default function SettingsPage() {
       >
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
           <TabsList
-            className="flex w-full justify-start gap-0 rounded-none bg-transparent p-0 h-12 overflow-x-auto no-scrollbar"
+            ref={tabsListRef}
+            className="relative flex w-full justify-start gap-0 rounded-none bg-transparent p-0 h-12 overflow-x-auto no-scrollbar"
           >
             {TABS.map((tab) => (
               <TabsTrigger
@@ -370,6 +457,14 @@ export default function SettingsPage() {
                 )}
               </TabsTrigger>
             ))}
+            {canScrollRight && (
+              <div
+                className="absolute right-0 top-0 z-10 h-full w-10 pointer-events-none flex items-center justify-end bg-gradient-to-r from-transparent to-[var(--bg-primary)] pr-2"
+                aria-hidden="true"
+              >
+                <ChevronRight size={16} style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+            )}
           </TabsList>
 
           {/* ── Tab Contents ── */}
@@ -494,8 +589,10 @@ function AccountTab() {
         >
           <CardContent className="p-4">
             {isLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--accent)' }} />
+              <div className="flex flex-col gap-3 py-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-10 w-full" />
               </div>
             ) : isAuthenticated ? (
               <AlertDialog>
@@ -531,7 +628,7 @@ function AccountTab() {
                     <AlertDialogAction
                       onClick={logout}
                       className="rounded-lg"
-                      style={{ backgroundColor: 'var(--error)', color: '#fff' }}
+                      style={{ backgroundColor: 'var(--error)', color: 'hsl(var(--destructive-foreground))' }}
                     >
                       退出
                     </AlertDialogAction>
@@ -541,7 +638,7 @@ function AccountTab() {
             ) : (
               <Button
                 className="w-full gap-2 rounded-xl"
-                style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                style={{ backgroundColor: 'var(--accent)', color: 'hsl(var(--accent-foreground))' }}
                 onClick={handleLogin}
               >
                 <Sparkles size={18} />
@@ -633,11 +730,7 @@ function ImageModelTab() {
   const isSaving = updateVision.isPending
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--accent)' }} />
-      </div>
-    )
+    return <SettingsTabSkeleton />
   }
 
   return (
@@ -863,7 +956,7 @@ function ImageModelTab() {
       <motion.div variants={cardItem}>
         <Button
           className="w-full gap-2 rounded-xl"
-          style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+          style={{ backgroundColor: 'var(--accent)', color: 'hsl(var(--accent-foreground))' }}
           onClick={handleSave}
           disabled={isSaving}
         >
@@ -994,11 +1087,7 @@ function WriterModelTab() {
   const isSaving = updateDiary.isPending
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--accent)' }} />
-      </div>
-    )
+    return <SettingsTabSkeleton />
   }
 
   return (
@@ -1558,7 +1647,7 @@ function WriterModelTab() {
       <motion.div variants={cardItem}>
         <Button
           className="w-full gap-2 rounded-xl"
-          style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+          style={{ backgroundColor: 'var(--accent)', color: 'hsl(var(--accent-foreground))' }}
           onClick={handleSave}
           disabled={isSaving}
         >
@@ -1762,7 +1851,7 @@ function DataTab() {
           <CardContent className="p-4">
             <Button
               className="w-full gap-2 rounded-xl"
-              style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+              style={{ backgroundColor: 'var(--accent)', color: 'hsl(var(--accent-foreground))' }}
               onClick={handleExport}
             >
               {exported ? (
@@ -1899,7 +1988,7 @@ function DataTab() {
             <AlertDialogAction
               onClick={handleDeleteConfirm}
               className="rounded-lg"
-              style={{ backgroundColor: 'var(--error)', color: '#fff' }}
+              style={{ backgroundColor: 'var(--error)', color: 'hsl(var(--destructive-foreground))' }}
             >
               删除
             </AlertDialogAction>
@@ -1931,7 +2020,7 @@ function DataTab() {
             <AlertDialogAction
               onClick={handleClearCache}
               className="rounded-lg"
-              style={{ backgroundColor: 'var(--error)', color: '#fff' }}
+              style={{ backgroundColor: 'var(--error)', color: 'hsl(var(--destructive-foreground))' }}
             >
               清空
             </AlertDialogAction>
@@ -1980,6 +2069,10 @@ function MemoryTab() {
   const memories = shortTermMemories ?? []
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [dreamMessage, setDreamMessage] = useState<{ text: string; success: boolean } | null>(null)
+
+  if (profileLoading || memLoading) {
+    return <MemorySkeleton />
+  }
 
   return (
     <motion.div
@@ -2151,7 +2244,7 @@ function MemoryTab() {
                           onClick={() => resetProfileMutation.mutate()}
                           disabled={resetProfileMutation.isPending}
                           className="rounded-lg"
-                          style={{ backgroundColor: 'var(--error)', color: '#fff' }}
+                          style={{ backgroundColor: 'var(--error)', color: 'hsl(var(--destructive-foreground))' }}
                         >
                           {resetProfileMutation.isPending ? (
                             <Loader2 size={14} className="animate-spin" />

@@ -36,13 +36,35 @@ app.post("/api/upload/file", async (c) => {
     return c.json({ error: "No file provided" }, 400);
   }
 
-  const result = await saveUploadedFile(user.id, file);
-  return c.json(result);
+  try {
+    const result = await saveUploadedFile(user.id, file);
+    return c.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Upload failed";
+    return c.json({ error: message }, 400);
+  }
 });
 
 // ── Serve uploaded files ──
 app.get("/api/uploads/:userId/:fileName", async (c) => {
-  const storagePath = `${c.req.param("userId")}/${c.req.param("fileName")}`;
+  let user;
+  try {
+    user = await authenticateRequest(c.req.raw.headers);
+  } catch {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  const userIdParam = Number(c.req.param("userId"));
+  if (!userIdParam || user.id !== userIdParam) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const fileName = c.req.param("fileName");
+  if (!fileName || fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
+    return c.json({ error: "Invalid file name" }, 400);
+  }
+
+  const storagePath = `${userIdParam}/${fileName}`;
   const fullPath = getFilePath(storagePath);
   if (!fullPath) return c.json({ error: "Not Found" }, 404);
 
