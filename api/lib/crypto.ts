@@ -8,11 +8,12 @@ const SEPARATOR = ":";
 function getKey(): Buffer {
   const secret = env.appSecret;
   if (secret.length >= 64) {
-    try {
-      return Buffer.from(secret, "hex");
-    } catch {
-      // fall through to hash
+    const buf = Buffer.from(secret, "hex");
+    if (buf.length === 32) {
+      return buf;
     }
+    // Not valid hex or wrong length — fall through to hash
+  }
   }
   return crypto.createHash("sha256").update(secret).digest();
 }
