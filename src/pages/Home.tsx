@@ -10,6 +10,9 @@ import {
   Moon,
   Zap,
   Wind,
+  Smile,
+  Angry,
+  Meh,
   Loader2,
   Check,
   AlertTriangle,
@@ -56,7 +59,7 @@ interface UploadedAttachment {
   storagePath: string
 }
 
-type MoodKey = 'happy' | 'calm' | 'sad' | 'tired' | 'excited' | 'anxious'
+type MoodKey = string
 
 // ──────────────────────────────────────────────────────────
 // Constants
@@ -69,13 +72,16 @@ const PROMPTS = [
   '把今天交给夜晚整理。',
 ]
 
-const MOODS: { key: MoodKey; label: string; Icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; color: string }[] = [
+const MOODS: { key: string; label: string; Icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; color: string }[] = [
   { key: 'happy', label: '开心', Icon: Sun, color: '#D4A853' },
-  { key: 'calm', label: '平静', Icon: Cloud, color: '#7BA3A0' },
-  { key: 'sad', label: '难过', Icon: CloudRain, color: '#8B9BB4' },
-  { key: 'tired', label: '疲惫', Icon: Moon, color: '#A08E8E' },
   { key: 'excited', label: '兴奋', Icon: Zap, color: '#C4826A' },
+  { key: 'content', label: '满足', Icon: Smile, color: '#D9B38C' },
+  { key: 'calm', label: '平静', Icon: Cloud, color: '#7BA3A0' },
+  { key: 'tired', label: '疲惫', Icon: Moon, color: '#A08E8E' },
   { key: 'anxious', label: '焦虑', Icon: Wind, color: '#9B8AA5' },
+  { key: 'sad', label: '难过', Icon: CloudRain, color: '#8B9BB4' },
+  { key: 'angry', label: '生气', Icon: Angry, color: '#D66A6A' },
+  { key: 'custom', label: '其他', Icon: Plus, color: '#9CA3AF' },
 ]
 
 const DRAWER_SPRING = { damping: 30, stiffness: 300 }
@@ -133,10 +139,11 @@ function EmptyStateIllustration() {
 // Mood Tag Component
 // ──────────────────────────────────────────────────────────
 
-function MoodTag({ moodKey }: { moodKey: MoodKey }) {
+function MoodTag({ moodKey }: { moodKey: string }) {
   const mood = MOODS.find((m) => m.key === moodKey)
-  if (!mood) return null
-  const { label, Icon, color } = mood
+  const Icon = mood?.Icon ?? Meh
+  const label = mood?.label ?? moodKey
+  const color = mood?.color ?? '#9CA3AF'
   return (
     <span
       className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
@@ -380,11 +387,15 @@ function BottomDrawer({
   mode?: 'create' | 'edit'
   initialData?: {
     content: string
-    mood: MoodKey
+    mood: string
     images?: string[]
   }
 }) {
-  const [selectedMood, setSelectedMood] = useState<MoodKey | null>(initialData?.mood ?? null)
+  const knownMoodKeys = useMemo(() => new Set(MOODS.filter((m) => m.key !== 'custom').map((m) => m.key)), [])
+  const initialMood = initialData?.mood ?? ''
+  const initialIsCustom = initialMood.length > 0 && !knownMoodKeys.has(initialMood)
+  const [selectedMood, setSelectedMood] = useState<string | null>(initialIsCustom ? 'custom' : (initialData?.mood ?? null))
+  const [customMood, setCustomMood] = useState(initialIsCustom ? initialMood : '')
   const [textValue, setTextValue] = useState(initialData?.content ?? '')
   const [images, setImages] = useState<string[]>(initialData?.images ?? [])
   const [imageFiles, setImageFiles] = useState<File[]>([])
@@ -392,6 +403,7 @@ function BottomDrawer({
   const [showSuccess, setShowSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const customInputRef = useRef<HTMLInputElement>(null)
   const keyboardHeight = useKeyboardHeight()
   const isEdit = mode === 'edit'
 
@@ -429,6 +441,7 @@ function BottomDrawer({
 
   const resetState = useCallback(() => {
     setSelectedMood(null)
+    setCustomMood('')
     setTextValue('')
     setImages([])
     setImageFiles([])
@@ -442,7 +455,8 @@ function BottomDrawer({
   }, [onClose, resetState])
 
   const handleSubmit = useCallback(async () => {
-    if (!selectedMood || !textValue.trim()) return
+    const finalMood = selectedMood === 'custom' ? customMood.trim() : selectedMood
+    if (!finalMood || !textValue.trim()) return
 
     setIsSubmitting(true)
 
@@ -478,7 +492,7 @@ function BottomDrawer({
         type: isEdit ? (images.length > 0 ? 'mixed' : 'text') : (imageFiles.length > 0 ? 'mixed' : 'text'),
         content: textValue.trim(),
         images: isEdit ? images : uploadedAttachments?.map((a) => a.fileUrl),
-        mood: selectedMood,
+        mood: finalMood,
       }, uploadedAttachments)
 
       setShowSuccess(true)
@@ -489,9 +503,9 @@ function BottomDrawer({
     } finally {
       setIsSubmitting(false)
     }
-  }, [selectedMood, textValue, imageFiles, images, isEdit, onSubmit, handleClose])
+  }, [selectedMood, customMood, textValue, imageFiles, images, isEdit, onSubmit, handleClose])
 
-  const canSubmit = selectedMood !== null && textValue.trim().length > 0
+  const canSubmit = selectedMood !== null && (selectedMood !== 'custom' || customMood.trim().length > 0) && textValue.trim().length > 0
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -600,7 +614,7 @@ function BottomDrawer({
                   ·必选
                 </span>
               </div>
-              <div className="mb-5 grid grid-cols-3 gap-2">
+              <div className="mb-3 grid grid-cols-3 gap-2">
                 {MOODS.map(({ key, label, Icon, color }) => {
                   const isSelected = selectedMood === key
                   return (
@@ -632,6 +646,34 @@ function BottomDrawer({
                   )
                 })}
               </div>
+
+              {selectedMood === 'custom' && (
+                <div className="mb-5">
+                  <input
+                    ref={customInputRef}
+                    type="text"
+                    value={customMood}
+                    onChange={(e) => setCustomMood(e.target.value)}
+                    maxLength={5}
+                    autoFocus
+                    placeholder="输入你的情绪，最多5个字"
+                    className="w-full rounded-xl border px-4 py-3 font-body text-[15px] outline-none transition-all duration-200"
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      borderColor: 'var(--divider)',
+                      color: 'var(--text-primary)',
+                    }}
+                    onFocus={(e) => {
+                      setTimeout(() => {
+                        e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                      }, 300)
+                    }}
+                  />
+                  <p className="mt-1.5 text-right text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {customMood.length}/5
+                  </p>
+                </div>
+              )}
 
               {/* ── Step 2: Text (required) ── */}
               <div className="mb-2 flex items-center gap-2">
