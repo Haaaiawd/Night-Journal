@@ -57,6 +57,7 @@
 | 记忆机制 | 人格画像 + 14 天短期记忆，日记越写越像“你写的” |
 | 日历视图 | 一眼看到哪些日子有记录、有日记 |
 | 安全认证 | 账号密码登录（bcrypt cost=12），统一 JWT session |
+| PWA 安装 | 支持 Chrome / Edge / Safari 安装为桌面/主屏应用 |
 | 一键部署 | `docker compose up -d --build` 即完成，自动迁移 |
 
 ### 服务器部署（推荐）
@@ -79,6 +80,18 @@ open http://localhost:3000
 ```
 
 容器启动时会自动执行 `drizzle-kit push` 完成数据库建表，无需手动迁移。
+
+### 安装为 PWA
+
+晚记已配置 PWA：manifest、`apple-touch-icon`、主题色、启动图标（192x192 / 512x512）都已就位。部署到支持 HTTPS 的域名后，可直接安装成原生应用一样的独立窗口。
+
+| 浏览器 / 平台 | 安装方式 |
+|---|---|
+| **Chrome / Edge（桌面/安卓）** | 地址栏右侧或菜单中选择「安装 晚记」/「安装应用」 |
+| **Safari（iOS）** | 分享按钮 →「添加到主屏幕」 |
+| **Safari（macOS Sonoma+）** | 菜单栏「文件」→「添加到程序坞」 |
+
+> 如果 Chrome 没有自动弹出安装提示，可通过浏览器菜单 ⋮ →「保存并分享」→「安装页面为应用」手动安装。
 
 ### 本地开发
 
@@ -176,6 +189,7 @@ npm test
 | Memory layer | Personality profile + 14-day short-term memory for continuity |
 | Calendar view | See at a glance which days have records and diaries |
 | Secure auth | Username/password login with bcrypt cost=12, unified JWT session |
+| PWA install | Install as desktop/home-screen app on Chrome / Edge / Safari |
 | One-command deploy | `docker compose up -d --build` with automatic migrations |
 
 ### Server Deployment (Recommended)
@@ -198,6 +212,18 @@ open http://localhost:3000
 ```
 
 The container automatically runs `drizzle-kit push` on startup, so no manual migration is needed.
+
+### Install as PWA
+
+Night Journal is PWA-ready: the manifest, `apple-touch-icon`, theme color, and launch icons (192x192 / 512x512) are all in place. Once deployed behind HTTPS, users can install it as a standalone app on desktop and mobile.
+
+| Browser / Platform | How to install |
+|---|---|
+| **Chrome / Edge (desktop / Android)** | Choose "Install Night Journal" from the address bar or browser menu |
+| **Safari (iOS)** | Tap Share → "Add to Home Screen" |
+| **Safari (macOS Sonoma+)** | File → "Add to Dock" |
+
+> If Chrome does not show the install prompt automatically, use the browser menu ⋮ → "Save and share" → "Install page as app".
 
 ### Local Development
 
