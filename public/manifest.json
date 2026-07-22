@@ -1,0 +1,23 @@
+{
+  "name": "晚记 Night Journal",
+  "short_name": "晚记",
+  "icons": [
+    {
+      "src": "/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#F5F2ED",
+  "background_color": "#F5F2ED",
+  "display": "standalone",
+  "start_url": "/",
+  "description": "AI fragment memory diary — record scattered thoughts throughout the day, compose them into coherent diary entries at night."
+}
