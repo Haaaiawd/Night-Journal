@@ -63,23 +63,28 @@
 ### 服务器部署（推荐）
 
 > 当前架构依赖 MySQL、本地文件存储和定时任务，**最推荐的方式是部署到一台长期运行的服务器或 VPS**，使用 Docker Compose 一键拉起全部服务。
+>
+> 现在已经实现真正的一键部署：一行命令即可，**无需手动准备 `.env` 或生成 `APP_SECRET`**。
 
 ```bash
-# 1. 复制环境变量模板
-cp .env.example .env
-
-# 2. 填写 APP_SECRET（至少 32 位随机字符串）
-#    openssl rand -hex 32
-#    DATABASE_URL 使用 Docker Compose 默认值即可
-
-# 3. 构建并启动
+# 构建并启动
 docker compose up -d --build
 
-# 4. 打开浏览器
+# 打开浏览器
 open http://localhost:3000
 ```
 
-容器启动时会自动执行 `drizzle-kit push` 完成数据库建表，无需手动迁移。
+容器启动时会自动完成：
+
+1. 生成或复用持久化的 `APP_SECRET`（保存在 `app_data` Docker volume 中）
+2. 执行 `drizzle-kit push` 完成数据库建表
+3. 启动 Hono 服务
+
+生产环境建议：
+
+- 在 `.env` 中显式设置 `APP_SECRET` 以便备份和迁移
+- 移除 `docker-compose.yml` 中 `db.ports` 的 3306 对外映射
+- 在 `app` 前面加一层 nginx / Caddy 做 TLS 终止
 
 ### 安装为 PWA
 
@@ -195,23 +200,28 @@ npm test
 ### Server Deployment (Recommended)
 
 > The current architecture depends on MySQL, local file storage, and scheduled tasks. **We recommend deploying to a long-running server or VPS** and starting everything with Docker Compose.
+>
+> This is now truly one-command: **no need to manually create `.env` or generate `APP_SECRET`**.
 
 ```bash
-# 1. Copy environment template
-cp .env.example .env
-
-# 2. Fill in APP_SECRET (at least 32 random chars)
-#    openssl rand -hex 32
-#    DATABASE_URL can use the Docker Compose default
-
-# 3. Build and start
+# Build and start
 docker compose up -d --build
 
-# 4. Open in browser
+# Open in browser
 open http://localhost:3000
 ```
 
-The container automatically runs `drizzle-kit push` on startup, so no manual migration is needed.
+On startup the container automatically:
+
+1. Generates or reuses a persisted `APP_SECRET` (stored in the `app_data` Docker volume)
+2. Runs `drizzle-kit push` to create/update database tables
+3. Starts the Hono server
+
+Production recommendations:
+
+- Set `APP_SECRET` explicitly in `.env` for backups and migration between hosts
+- Remove the 3306 `db.ports` mapping in `docker-compose.yml`
+- Put nginx / Caddy in front of `app` for TLS termination
 
 ### Install as PWA
 
