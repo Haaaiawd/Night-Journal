@@ -150,11 +150,47 @@ export async function findAttachmentsByEntryId(entryId: number) {
     .where(eq(entryAttachments.entryId, entryId));
 }
 
+function isValidStoragePath(userId: number, storagePath: string): boolean {
+  // Prevent path traversal and cross-user access
+  // storagePath must be exactly: "<userId>/<fileName>"
+  if (storagePath.includes("..") || storagePath.includes("\\")) {
+    return false;
+  }
+  if (storagePath.startsWith("/")) return false;
+  const parts = storagePath.split("/");
+  if (parts.length !== 2) return false;
+  const [first, second] = parts;
+  if (first !== String(userId)) return false;
+  if (!second || second.includes("/") || second.includes("\\")) return false;
+  return true;
+}
+
+function isValidAttachmentFileUrl(
+  userId: number,
+  storagePath: string,
+  fileUrl: string,
+): boolean {
+  // Local file URLs are derived from the storage path; reject crafted URLs
+  if (!fileUrl.startsWith("/api/uploads/")) return false;
+  const suffix = fileUrl.slice("/api/uploads/".length);
+  return suffix === storagePath && !suffix.includes("..") && !suffix.includes("\\");
+}
+
 export async function createAttachment(
   userId: number,
   entryId: number,
   data: { fileUrl: string; fileType: string; fileName: string; storagePath: string },
 ) {
+  if (!isValidStoragePath(userId, data.storagePath)) {
+    throw new Error("Invalid attachment storage path");
+  }
+  if (!isValidAttachmentFileUrl(userId, data.storagePath, data.fileUrl)) {
+    throw new Error("Invalid attachment file URL");
+  }
+  if (data.fileName.includes("..") || data.fileName.includes("/") || data.fileName.includes("\\")) {
+    throw new Error("Invalid attachment file name");
+  }
+
   const db = getDb();
   const [{ id }] = await db
     .insert(entryAttachments)

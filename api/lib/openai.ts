@@ -2,7 +2,7 @@
  * OpenAI-compatible API helpers for testing connections and calling vision models.
  */
 
-import { isPrivateHost } from "./url-guard";
+import { isPrivateHost, isPrivateResolvedHost } from "./url-guard";
 
 interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -28,7 +28,7 @@ function normalizeBaseUrl(baseUrl: string): string {
   return url;
 }
 
-function validateBaseUrl(baseUrl: string): void {
+async function validateBaseUrl(baseUrl: string): Promise<void> {
   const normalized = normalizeBaseUrl(baseUrl);
   let parsed: URL;
   try {
@@ -44,6 +44,10 @@ function validateBaseUrl(baseUrl: string): void {
   if (isPrivateHost(parsed.hostname)) {
     throw new Error("API base URL must not point to a private/internal network address");
   }
+
+  if (await isPrivateResolvedHost(parsed.hostname)) {
+    throw new Error("API base URL resolves to a private/internal network address");
+  }
 }
 
 /**
@@ -56,7 +60,7 @@ export async function testModelConnection(opts: {
   model?: string;
 }): Promise<{ success: true; model: string; message: string }> {
   const rawBase = opts.baseUrl || "https://api.openai.com";
-  validateBaseUrl(rawBase);
+  await validateBaseUrl(rawBase);
   const base = normalizeBaseUrl(rawBase);
   const model = opts.model || "gpt-4o-mini";
   const url = `${base}/chat/completions`;
@@ -80,6 +84,7 @@ export async function testModelConnection(opts: {
       },
       body: JSON.stringify(body),
       signal: controller.signal,
+      redirect: "error",
     });
 
     if (!res.ok) {
@@ -124,7 +129,7 @@ export async function callVisionModel(opts: {
   imageMimeType: string;
 }): Promise<string> {
   const rawBase = opts.baseUrl || "https://api.openai.com";
-  validateBaseUrl(rawBase);
+  await validateBaseUrl(rawBase);
   const base = normalizeBaseUrl(rawBase);
   const model = opts.model || "gpt-4o";
   const url = `${base}/chat/completions`;
@@ -158,6 +163,7 @@ export async function callVisionModel(opts: {
       },
       body: JSON.stringify(body),
       signal: controller.signal,
+      redirect: "error",
     });
 
     if (!res.ok) {
@@ -186,7 +192,7 @@ export async function callChatModel(opts: {
   timeoutMs?: number;
 }): Promise<string> {
   const rawBase = opts.baseUrl || "https://api.openai.com";
-  validateBaseUrl(rawBase);
+  await validateBaseUrl(rawBase);
   const base = normalizeBaseUrl(rawBase);
   const model = opts.model || "gpt-4o-mini";
   const url = `${base}/chat/completions`;
@@ -210,6 +216,7 @@ export async function callChatModel(opts: {
       },
       body: JSON.stringify(body),
       signal: controller.signal,
+      redirect: "error",
     });
 
     if (!res.ok) {

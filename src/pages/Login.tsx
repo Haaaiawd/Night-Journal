@@ -81,30 +81,6 @@ export default function Login() {
             </Button>
           </form>
 
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">或</span>
-            </div>
-          </div>
-
-          {/* Kimi OAuth */}
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              // Redirect to backend-initiated OAuth flow.
-              // The backend generates a CSRF nonce, sets it as an httpOnly cookie,
-              // and redirects to the Kimi authorization endpoint.
-              window.location.href = "/api/oauth/initiate";
-            }}
-          >
-            使用 Kimi 登录
-          </Button>
-
           <div className="text-center text-sm text-muted-foreground">
             还没有账号？{" "}
             <Link to="/register" className="underline underline-offset-4">

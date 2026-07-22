@@ -21,7 +21,7 @@ import { setCookie } from "hono/cookie";
 import bcrypt from "bcryptjs";
 import { getSessionCookieOptions } from "../lib/cookies";
 import { Session } from "@contracts/constants";
-import { signSessionToken } from "../kimi/session";
+import { signSessionToken } from "./session";
 import {
   findUserByUsername,
   createLocalUser,

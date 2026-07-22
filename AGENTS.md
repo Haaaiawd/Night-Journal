@@ -82,11 +82,11 @@
 ## 当前状态
 
 - **最近一次更新**: 2026 — 新增账号密码登录、Docker 一键部署（自动迁移）、Dream 记忆机制
-- **认证**: 账号密码（bcrypt cost=12）+ Kimi OAuth 2.0 并行，统一 JWT session
+- **认证**: 账号密码（bcrypt cost=12），统一 JWT session
 - **数据库迁移**: 自动 — 容器启动时由 `entrypoint.sh` 执行 `drizzle-kit push`（schema diff，幂等可重跑；不要手动跑 `migrate`，生成的 SQL 文件缺 `IF NOT EXISTS` 会撞表）
 - **部署方式**: `docker compose up -d --build` 即完成全部，无需手动建表
 - **Dream 记忆机制**: 日记生成后异步提炼用户画像（人格/关系/情绪/语风）+ 短期记忆（14天衰减），注入后续日记 prompt 提供连续性。Settings "记忆" tab 可只读+删除。`aiSettings.enableDream` 开关控制
-- **测试状态**: 68 个单元测试全部通过（vitest），覆盖账号密码注册/登录、OAuth、JWT、env、diaries、memories 路由、Dream 响应解析
+- **测试状态**: 单元测试（vitest）覆盖账号密码注册/登录、JWT、env、diaries、memories 路由、Dream 响应解析
 
 ---
 
@@ -97,7 +97,7 @@
 | 前端 | React 19, React Router v7, TanStack Query (via tRPC), Framer Motion, Tailwind CSS, shadcn/ui |
 | 后端 | Hono (Node http adapter), tRPC v11, Drizzle ORM |
 | 数据库 | MySQL 8.4 |
-| 认证 | 账号密码（bcrypt）+ Kimi OAuth 2.0（可选），统一 JWT session (HS256, 30天) |
+| 认证 | 账号密码（bcrypt），统一 JWT session (HS256, 30天) |
 | 打包 | Vite (前端) + esbuild (后端) |
 
 ---
@@ -131,18 +131,16 @@ npm run db:studio
 ```text
 Night-Journal/
 ├── api/                    # Hono 后端
-│   ├── boot.ts             # 路由注册入口（OAuth + 账号密码 + tRPC）
+│   ├── boot.ts             # 路由注册入口（账号密码 + tRPC）
 │   ├── context.ts          # tRPC context（从 JWT cookie 解析用户）
 │   ├── middleware.ts        # authedQuery / createRouter 工厂
 │   ├── auth/
-│   │   └── password.ts     # POST /api/auth/register + /api/auth/login（bcrypt）
+│   │   ├── password.ts     # POST /api/auth/register + /api/auth/login（bcrypt）
+│   │   └── session.ts      # JWT sign/verify
 │   ├── lib/
-│   │   ├── env.ts          # 环境变量：APP_SECRET/DATABASE_URL 必填，Kimi 变量可选
+│   │   ├── env.ts          # 环境变量：APP_SECRET/DATABASE_URL 必填
 │   │   ├── cookies.ts      # session cookie 配置
 │   │   └── scheduler.ts    # 定时自动生成日记调度器
-│   ├── kimi/
-│   │   ├── auth.ts         # OAuth CSRF-safe initiate + callback handler（懒加载 JWKS）
-│   │   └── session.ts      # JWT sign/verify（两套登录方式共用）
 │   ├── queries/            # Drizzle ORM 数据库查询
 │   │   ├── entries/
 │   │   ├── diaries/
@@ -162,7 +160,7 @@ Night-Journal/
 │   │   ├── DiaryDetail.tsx # 日记详情（含真正的 delete）
 │   │   ├── CalendarPage.tsx
 │   │   ├── Settings.tsx    # AI 模型配置
-│   │   ├── Login.tsx       # 账号密码登录 + Kimi OAuth 按钮
+│   │   ├── Login.tsx       # 账号密码登录
 │   │   └── Register.tsx    # 账号注册页
 │   ├── components/
 │   │   ├── Layout.tsx      # 主布局（含 BottomNav）
@@ -175,7 +173,7 @@ Night-Journal/
 │   ├── schema.ts           # Drizzle schema（users/entries/diaries/aiSettings）
 │   └── migrations/         # 迁移元数据（snapshot/journal 必须提交；SQL 文件被 gitignore，push 不读）
 ├── contracts/
-│   ├── constants.ts        # 路径常量 + OAuth/Session 配置
+│   ├── constants.ts        # 路径常量 + Session 配置
 │   └── errors.ts           # 错误码
 ├── entrypoint.sh           # 容器启动脚本：drizzle-kit push → node dist/boot.js
 ├── Dockerfile              # 多阶段构建：builder → runner (node:22-alpine)
@@ -195,32 +193,14 @@ POST /api/auth/register  { username, password }
   → 检查用户名唯一性
   → bcrypt.hash(password, 12)
   → INSERT users（unionId = "local:<username>"）
-  → 签发 JWT → 写入 kimi_sid cookie (30天)
+  → 签发 JWT → 写入 session cookie (30天)
   → 201
 
 POST /api/auth/login  { username, password }
   → 查询用户
   → bcrypt.compare（未知用户也执行，防时序攻击）
-  → 签发 JWT → 写入 kimi_sid cookie (30天)
+  → 签发 JWT → 写入 session cookie (30天)
   → 200
-```
-
-### Kimi OAuth 2.0（可选）
-
-```
-用户点击"使用 Kimi 登录"
-  → GET /api/oauth/initiate
-    → 生成 crypto.getRandomValues() nonce
-    → 写入 httpOnly cookie: kimi_oauth_nonce (10 min TTL)
-    → state = btoa(JSON.stringify({ redirectUri, nonce }))
-    → 302 → Kimi 授权页
-  → Kimi 回调 → GET /api/oauth/callback?code=...&state=...
-    → 解码 state，提取 nonce
-    → 对比 kimi_oauth_nonce cookie（不一致 → 400，CSRF 防护）
-    → 删除 nonce cookie
-    → 换 access_token → 拉用户信息 → upsertUser
-    → 签发 JWT → 写入 kimi_sid cookie (30天)
-    → 302 → /
 ```
 
 ---
@@ -250,10 +230,10 @@ POST /api/auth/login  { username, password }
 |---|---|---|
 | `APP_SECRET` | ✅ | JWT 签名密钥，至少 32 位；`openssl rand -hex 32` |
 | `DATABASE_URL` | ✅ | MySQL 连接串（Compose 内置 MySQL 时用默认值即可） |
-| `APP_ID` | 可选 | Kimi 应用 ID，仅 Kimi OAuth 时需要 |
+| `APP_ID` | 可选 | Kimi 应用 ID，已不再需要 |
 | `KIMI_AUTH_URL` | 可选 | Kimi OAuth 服务地址 |
 | `KIMI_OPEN_URL` | 可选 | Kimi Open API 地址 |
-| `OWNER_UNION_ID` | 可选 | 管理员 union_id |
+| `OWNER_UNION_ID` | 可选 | 管理员 union_id（本地账号格式 `local:<username>`） |
 | `PORT` | 可选 | 监听端口，默认 3000 |
 | `ENABLE_AUTO_GENERATION_IN_DEV` | 可选 | 设为 `true` 时在开发模式下启用自动日记生成调度器（生产环境默认启用） |
 

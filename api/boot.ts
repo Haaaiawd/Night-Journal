@@ -5,7 +5,7 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
-import { createOAuthCallbackHandler, createOAuthInitiateHandler, authenticateRequest } from "./kimi/auth";
+import { authenticateRequest } from "./auth/session";
 import { createRegisterHandler, createLoginHandler } from "./auth/password";
 import { Paths } from "@contracts/constants";
 import { saveUploadedFile, getFilePath } from "./lib/upload";
@@ -16,8 +16,6 @@ import path from "path";
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
-app.get(Paths.oauthInitiate, createOAuthInitiateHandler());
-app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 app.post(Paths.authRegister, createRegisterHandler());
 app.post(Paths.authLogin, createLoginHandler());
 

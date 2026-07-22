@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Exec(python)"
+      "Exec(python)",
+      "Exec(cd)",
+      "Exec(curl)",
+      "Exec(powershell)"
     ]
   }
 }

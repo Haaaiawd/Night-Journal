@@ -36,11 +36,8 @@ vi.mock("../queries/diaries", () => ({
 // Mock env so the module loads in test environment
 vi.mock("../lib/env", () => ({
   env: {
-    appId: "test-app-id",
     appSecret: "test-secret-that-is-long-enough-32c",
     databaseUrl: "mysql://root:pw@localhost/db",
-    kimiAuthUrl: "https://kimi.test",
-    kimiOpenUrl: "https://open.test",
     isProduction: false,
     ownerUnionId: "",
   },

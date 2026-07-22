@@ -12,10 +12,7 @@ services:
       # Required
       APP_SECRET: ${APP_SECRET}
       DATABASE_URL: ${DATABASE_URL:-mysql://nightjournal:nightjournal@db:3306/nightjournal}
-      # Optional — only needed if you want Kimi OAuth login
-      APP_ID: ${APP_ID:-}
-      KIMI_AUTH_URL: ${KIMI_AUTH_URL:-}
-      KIMI_OPEN_URL: ${KIMI_OPEN_URL:-}
+      # Optional
       OWNER_UNION_ID: ${OWNER_UNION_ID:-}
     volumes:
       - upload_data:/app/data/uploads

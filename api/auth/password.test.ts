@@ -20,11 +20,8 @@ import bcrypt from "bcryptjs";
 
 vi.mock("../lib/env", () => ({
   env: {
-    appId: "test-app-id",
     appSecret: "test-secret-that-is-long-enough-32c",
     databaseUrl: "mysql://x:y@localhost/z",
-    kimiAuthUrl: "http://kimi.test",
-    kimiOpenUrl: "http://open.test",
     isProduction: false,
     ownerUnionId: "",
   },
@@ -36,7 +33,7 @@ vi.mock("../queries/users", () => ({
 }));
 
 // session signing just needs to return a string token
-vi.mock("../kimi/session", () => ({
+vi.mock("./session", () => ({
   signSessionToken: vi.fn().mockResolvedValue("mock-jwt-token"),
 }));
 
@@ -157,7 +154,7 @@ describe("POST /api/auth/register — happy path", () => {
     expect(body.ok).toBe(true);
     // Session cookie should be set
     const setCookie = res.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("kimi_sid");
+    expect(setCookie).toContain("session");
   });
 });
 
@@ -217,7 +214,7 @@ describe("POST /api/auth/login — happy path", () => {
     const body = await res.json() as { ok: boolean };
     expect(body.ok).toBe(true);
     const setCookie = res.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("kimi_sid");
+    expect(setCookie).toContain("session");
   });
 });
 

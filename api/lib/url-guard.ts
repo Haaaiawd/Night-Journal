@@ -1,4 +1,5 @@
 import { isIP } from "net";
+import { resolve4, resolve6 } from "dns/promises";
 
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
@@ -57,4 +58,28 @@ export function isPrivateHost(hostname: string): boolean {
   if (isIP(stripped) === 6) return isPrivateIPv6(stripped);
 
   return false;
+}
+
+/**
+ * Resolve a hostname to its IP addresses and return true if any resolved IP
+ * belongs to a private/internal network. This is the SSRF/DNS rebinding guard:
+ * an attacker-controlled domain may resolve to a public IP on the first check
+ * and then to a private IP when the server performs the actual request.
+ */
+export async function isPrivateResolvedHost(hostname: string): Promise<boolean> {
+  if (isPrivateHost(hostname)) return true;
+
+  const records: string[] = [];
+  try {
+    records.push(...(await resolve4(hostname)));
+  } catch {
+    // ignore: no A records
+  }
+  try {
+    records.push(...(await resolve6(hostname)));
+  } catch {
+    // ignore: no AAAA records
+  }
+
+  return records.some((ip) => isPrivateHost(ip));
 }

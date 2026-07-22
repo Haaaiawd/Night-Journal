@@ -22,7 +22,6 @@ import {
   Sun,
   Moon,
   ChevronRight,
-  Sparkles,
   RotateCcw,
   Save,
   FolderOpen,
@@ -641,8 +640,7 @@ function AccountTab() {
                 style={{ backgroundColor: 'var(--accent)', color: 'hsl(var(--accent-foreground))' }}
                 onClick={handleLogin}
               >
-                <Sparkles size={18} />
-                使用 Kimi 登录
+                去登录
               </Button>
             )}
           </CardContent>

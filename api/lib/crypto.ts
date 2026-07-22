@@ -14,7 +14,6 @@ function getKey(): Buffer {
     }
     // Not valid hex or wrong length — fall through to hash
   }
-  }
   return crypto.createHash("sha256").update(secret).digest();
 }
 
